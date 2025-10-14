@@ -273,7 +273,7 @@ class Lightning:
         try:
             buffer = io.BytesIO(data)
             with gzip.GzipFile(fileobj=buffer, mode="rb") as f:
-                params_dict = torch.load(f)
+                params_dict = torch.load(f, weights_only=False)
             buffer.close()
             del buffer
             return OrderedDict(params_dict)

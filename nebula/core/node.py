@@ -48,6 +48,13 @@ from nebula.core.training.siamese import Siamese
 # os.environ["TORCH_LOGS"] = "+dynamo"
 # os.environ["TORCHDYNAMO_VERBOSE"] = "1"
 
+# Configure logging to output to Docker logs (stdout)
+logging.basicConfig(
+    level=logging.INFO,  # or DEBUG if you want more detail
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+
 
 async def main(config: Config):
     """

@@ -1203,6 +1203,8 @@ class ScenarioManagement:
                     privileged=True,
                     device_requests=[docker.types.DeviceRequest(driver="nvidia", count=-1, capabilities=[["gpu"]])],
                     extra_hosts={"host.docker.internal": "host-gateway"},
+                    cpu_period = 100000,
+                    cpu_quota  = 100000,
                 )
             else:
                 environment = {"NEBULA_LOGS_DIR": "/nebula/app/logs/", "NEBULA_CONFIG_DIR": "/nebula/app/config/"}
@@ -1211,6 +1213,8 @@ class ScenarioManagement:
                     privileged=True,
                     device_requests=[],
                     extra_hosts={"host.docker.internal": "host-gateway"},
+                    cpu_period = 100000,
+                    cpu_quota  = 200000,
                 )
 
             volumes = ["/nebula", "/var/run/docker.sock"]
@@ -1252,6 +1256,7 @@ class ScenarioManagement:
                     command=command,
                     host_config=host_config,
                     networking_config=networking_config,
+                    runtime="nvidia" if node["device_args"]["accelerator"] == "gpu" else None,
                 )
             except Exception as e:
                 logging.exception(f"Creating container {name}: {e}")

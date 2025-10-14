@@ -139,7 +139,7 @@ class Siamese:
             buffer = io.BytesIO(data)
             # with gzip.GzipFile(fileobj=buffer, mode='rb') as f:
             #    params_dict = torch.load(f, map_location='cpu')
-            params_dict = torch.load(buffer, map_location="cpu")
+            params_dict = torch.load(buffer, map_location="cpu", weights_only=False)
             return OrderedDict(params_dict)
         except:
             raise Exception("Error decoding parameters")
