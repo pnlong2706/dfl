@@ -60,6 +60,7 @@ class NebulaJSONLogger:
         self.current_round_data = {
             "round": round_num,
             "start_time": datetime.now().isoformat(),
+            "dataset_info": {},
             "training": {},
             "validation": {},
             "test_local": {},
@@ -68,6 +69,37 @@ class NebulaJSONLogger:
             "metadata": kwargs
         }
         logging.info(f"[JSON Logger] Started logging round {round_num}")
+
+    def log_dataset_info(self, num_train_samples: int, num_val_samples: int = None,
+                        num_test_local_samples: int = None, num_test_global_samples: int = None):
+        """Log dataset information at the beginning of a round."""
+        if self.current_round_data is None:
+            logging.warning("[JSON Logger] No active round. Call start_round() first.")
+            return
+
+        dataset_info = {
+            "num_train_samples": num_train_samples,
+        }
+
+        if num_val_samples is not None:
+            dataset_info["num_val_samples"] = num_val_samples
+        if num_test_local_samples is not None:
+            dataset_info["num_test_local_samples"] = num_test_local_samples
+        if num_test_global_samples is not None:
+            dataset_info["num_test_global_samples"] = num_test_global_samples
+
+        self.current_round_data["dataset_info"] = dataset_info
+
+        # Log to console
+        info_str = f"Training samples: {num_train_samples}"
+        if num_val_samples is not None:
+            info_str += f", Validation samples: {num_val_samples}"
+        if num_test_local_samples is not None:
+            info_str += f", Test (Local) samples: {num_test_local_samples}"
+        if num_test_global_samples is not None:
+            info_str += f", Test (Global) samples: {num_test_global_samples}"
+
+        logging.info(f"[Dataset Info] {info_str}")
 
     def log_training_metrics(self, epoch: int, metrics: Dict[str, Any]):
         """Log training metrics for an epoch."""

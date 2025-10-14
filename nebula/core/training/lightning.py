@@ -275,6 +275,38 @@ class Lightning:
             except Exception as e:
                 logging.warning(f"Failed to start JSON logging for round {round}: {e}")
 
+    def _log_dataset_sizes(self):
+        """Log the number of samples in training, validation, and test datasets."""
+        if self.json_logger is None:
+            return
+
+        try:
+            # Ensure datamodule is set up
+            if self.datamodule is None:
+                logging.warning("Datamodule not set, cannot log dataset sizes")
+                return
+
+            # Get dataset sizes
+            num_train = len(self.datamodule.data_train) if self.datamodule.data_train is not None else 0
+            num_val = len(self.datamodule.data_val) if self.datamodule.data_val is not None else 0
+            num_test_local = len(self.datamodule.local_te_subset) if self.datamodule.local_te_subset is not None else 0
+            num_test_global = len(self.datamodule.global_te_subset) if self.datamodule.global_te_subset is not None else 0
+
+            # Log to JSON logger
+            self.json_logger.log_dataset_info(
+                num_train_samples=num_train,
+                num_val_samples=num_val if num_val > 0 else None,
+                num_test_local_samples=num_test_local if num_test_local > 0 else None,
+                num_test_global_samples=num_test_global if num_test_global > 0 else None
+            )
+
+            # Also log to standard logger
+            logging.info(f"Dataset sizes - Train: {num_train}, Val: {num_val}, "
+                        f"Test (Local): {num_test_local}, Test (Global): {num_test_global}")
+
+        except Exception as e:
+            logging.warning(f"Failed to log dataset sizes: {e}")
+
     def get_current_loss(self):
         return self.model.get_loss()
 
@@ -329,6 +361,9 @@ class Lightning:
             # Pass JSON logger to model
             if self.json_logger is not None:
                 self.model.json_logger = self.json_logger
+
+            # Log dataset sizes at the beginning of training
+            self._log_dataset_sizes()
 
             self._trainer.fit(self.model, self.datamodule)
         except Exception as e:
