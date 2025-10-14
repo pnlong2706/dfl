@@ -1198,10 +1198,15 @@ class ScenarioManagement:
                     "NEBULA_LOGS_DIR": "/nebula/app/logs/",
                     "NEBULA_CONFIG_DIR": "/nebula/app/config/",
                 }
+                visible_devices_str = os.environ.get("CUDA_VISIBLE_DEVICES")
+                if visible_devices_str is None:
+                    visible_devices_str = '4,5,6,7' #TODO: fix hardcode
+                device_ids = visible_devices_str.split(',')
+
                 host_config = client.api.create_host_config(
                     binds=[f"{self.root_path}:/nebula", "/var/run/docker.sock:/var/run/docker.sock"],
                     privileged=True,
-                    device_requests=[docker.types.DeviceRequest(driver="nvidia", count=-1, capabilities=[["gpu"]])],
+                    device_requests=[docker.types.DeviceRequest(driver="nvidia", device_ids=device_ids, capabilities=[["gpu"]])],
                     extra_hosts={"host.docker.internal": "host-gateway"},
                     cpu_period = 100000,
                     cpu_quota  = 100000,
