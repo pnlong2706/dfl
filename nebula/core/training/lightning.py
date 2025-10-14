@@ -19,6 +19,7 @@ from torch.nn import functional as F
 from nebula.config.config import TRAINING_LOGGER
 from nebula.core.utils.deterministic import enable_deterministic
 from nebula.core.utils.nebulalogger_tensorboard import NebulaTensorBoardLogger
+from nebula.core.utils.nebulalogger_json import NebulaJSONLogger
 from nebula.core.nebulaevents import TestMetricsEvent
 from nebula.core.eventmanager import EventManager
 
@@ -135,7 +136,9 @@ class Lightning:
         self.idx = self.config.participant["device_args"]["idx"]
         self.log_dir = os.path.join(self.config.participant["tracking_args"]["log_dir"], self.experiment_name)
         self._logger = None
+        self.json_logger = None
         self.create_logger()
+        self.create_json_logger()
         enable_deterministic(seed=self.config.participant["scenario_args"]["random_seed"])
 
     @property
@@ -171,6 +174,19 @@ class Lightning:
             nebulalogger = None
 
         self._logger = nebulalogger
+
+    def create_json_logger(self):
+        """Create JSON logger for structured metrics logging."""
+        try:
+            self.json_logger = NebulaJSONLogger(
+                log_dir=self.log_dir,
+                participant_id=self.idx,
+                scenario_name=self.experiment_name
+            )
+            logging.info(f"JSON logger created for participant {self.idx}")
+        except Exception as e:
+            logging.warning(f"Failed to create JSON logger: {e}")
+            self.json_logger = None
 
     def create_trainer(self):
         # Create a new trainer and logger for each round
@@ -252,6 +268,13 @@ class Lightning:
         self.round = round
         self.model.set_updated_round(round)
 
+        # Start JSON logging for this round
+        if self.json_logger is not None:
+            try:
+                self.json_logger.start_round(round)
+            except Exception as e:
+                logging.warning(f"Failed to start JSON logging for round {round}: {e}")
+
     def get_current_loss(self):
         return self.model.get_loss()
 
@@ -303,6 +326,10 @@ class Lightning:
 
     def _train_sync(self):
         try:
+            # Pass JSON logger to model
+            if self.json_logger is not None:
+                self.model.json_logger = self.json_logger
+
             self._trainer.fit(self.model, self.datamodule)
         except Exception as e:
             logging_training.error(f"Error in _train_sync: {e}")
@@ -324,10 +351,22 @@ class Lightning:
 
     def _test_sync(self):
         try:
+            # Pass JSON logger to model
+            if self.json_logger is not None:
+                self.model.json_logger = self.json_logger
+
             self._trainer.test(self.model, self.datamodule, verbose=True)
             metrics = self._trainer.callback_metrics
             loss = metrics.get('val_loss/dataloader_idx_0', None).item()
             accuracy = metrics.get('val_accuracy/dataloader_idx_0', None).item()
+
+            # End round logging after test
+            if self.json_logger is not None:
+                try:
+                    self.json_logger.end_round()
+                except Exception as e:
+                    logging.warning(f"Failed to end JSON logging for round: {e}")
+
             return loss, accuracy
         except Exception as e:
             logging_training.error(f"Error in _test_sync: {e}")

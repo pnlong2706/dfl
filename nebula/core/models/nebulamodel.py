@@ -83,8 +83,26 @@ class NebulaModel(pl.LightningModule, ABC):
             f"{phase}/{key.replace('Multiclass', '').split('/')[-1]}": value.detach() for key, value in output.items()
         }
 
+        # Log to TensorBoard
         self.logger.log_data(output, step=self.global_number[phase])
 
+        # Extract clean metrics (without phase prefix) for JSON logging
+        clean_metrics = {key.split('/')[-1]: value.item() if hasattr(value, 'item') else value
+                        for key, value in output.items()}
+
+        # Log to JSON logger if available
+        if hasattr(self, 'json_logger') and self.json_logger is not None:
+            try:
+                if phase == "Train":
+                    self.json_logger.log_training_metrics(self.global_number[phase], clean_metrics)
+                elif phase == "Validation":
+                    self.json_logger.log_validation_metrics(clean_metrics)
+                elif "Test" in phase:
+                    self.json_logger.log_test_metrics(phase, clean_metrics)
+            except Exception as e:
+                logging_training.warning(f"Failed to log metrics to JSON: {e}")
+
+        # Print metrics in a box
         metrics_str = ""
         for key, value in output.items():
             metrics_str += f"{key}: {value:.4f}\n"
