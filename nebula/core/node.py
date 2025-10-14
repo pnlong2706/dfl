@@ -34,6 +34,7 @@ from nebula.core.models.cifar10.fastermobilenet import FasterMobileNet
 from nebula.core.models.cifar10.resnet import CIFAR10ModelResNet
 from nebula.core.models.cifar10.simplemobilenet import SimpleMobileNetV1
 from nebula.core.models.cifar100.cnn import CIFAR100ModelCNN
+from nebula.core.models.cifar100.resnet import CIFAR100ModelResNet
 from nebula.core.models.emnist.cnn import EMNISTModelCNN
 from nebula.core.models.emnist.mlp import EMNISTModelMLP
 from nebula.core.models.fashionmnist.cnn import FashionMNISTModelCNN
@@ -133,6 +134,10 @@ async def main(config: Config):
         handler = CIFAR10PartitionHandler
         if model_name == "ResNet9":
             model = CIFAR10ModelResNet(classifier="resnet9")
+        elif model_name == "ResNet18":
+            model = CIFAR10ModelResNet(classifier="resnet18")
+        elif model_name == "ResNet34":
+            model = CIFAR10ModelResNet(classifier="resnet34")
         elif model_name == "fastermobilenet":
             model = FasterMobileNet()
         elif model_name == "simplemobilenet":
@@ -150,6 +155,10 @@ async def main(config: Config):
         handler = CIFAR100PartitionHandler
         if model_name == "CNN":
             model = CIFAR100ModelCNN()
+        elif model_name == "ResNet18":
+            model = CIFAR100ModelResNet(classifier="resnet18")
+        elif model_name == "ResNet34":
+            model = CIFAR100ModelResNet(classifier="resnet34")
         else:
             raise ValueError(f"Model {model} not supported for dataset {dataset_name}")
     else:
