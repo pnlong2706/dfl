@@ -47,6 +47,12 @@ Complete training history with all rounds and metrics.
       "start_time": "2025-01-15T10:30:00.123456",
       "end_time": "2025-01-15T10:45:00.789012",
       "duration_seconds": 900.67,
+      "dataset_info": {
+        "num_train_samples": 5000,
+        "num_val_samples": 500,
+        "num_test_local_samples": 1000,
+        "num_test_global_samples": 10000
+      },
       "training": {
         "epochs": [
           {
@@ -247,6 +253,8 @@ The existing log files now contain more detailed information:
 2025-01-15 10:30:00 | INFO |   Summary file: app/logs/.../participant_0_summary.json
 2025-01-15 10:30:00 | INFO | Update | current round = 1
 2025-01-15 10:30:00 | INFO | [JSON Logger] Started logging round 1
+2025-01-15 10:30:00 | INFO | [Dataset Info] Training samples: 5000, Validation samples: 500, Test (Local) samples: 1000, Test (Global) samples: 10000
+2025-01-15 10:30:00 | INFO | Dataset sizes - Train: 5000, Val: 500, Test (Local): 1000, Test (Global): 10000
 2025-01-15 10:30:00 | INFO | ========== [Training] Started ==========
 2025-01-15 10:30:15 | INFO | [Training] Epoch 0 - Accuracy: 0.7523, Precision: 0.7489
 2025-01-15 10:32:30 | INFO | [Training] Epoch 1 - Accuracy: 0.8123, Precision: 0.8089
@@ -271,10 +279,25 @@ For each phase (Training, Validation, Test), the following metrics are logged:
 - **F1Score**: F1 score (macro average)
 
 Additional information logged:
+- **Dataset Info**: Number of training, validation, and test samples per round
 - **Timestamps**: ISO 8601 format for all events
 - **Duration**: Time taken for each round in seconds
 - **Network info**: Neighbors, role, and other network metadata
 - **Metadata**: Custom key-value pairs per round
+
+### Dataset Information
+
+At the beginning of each round, the following dataset sizes are logged:
+- `num_train_samples`: Number of training samples
+- `num_val_samples`: Number of validation samples (if validation set is used)
+- `num_test_local_samples`: Number of local test samples
+- `num_test_global_samples`: Number of global test samples
+
+This information is useful for:
+- Understanding data distribution across participants
+- Verifying correct data partitioning
+- Analyzing the relationship between dataset size and model performance
+- Debugging data loading issues
 
 ## Backward Compatibility
 
