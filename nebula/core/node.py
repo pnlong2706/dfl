@@ -250,6 +250,34 @@ async def main(config: Config):
 if __name__ == "__main__":
     config_path = str(sys.argv[1])
     config = Config(entity="participant", participant_config_file=config_path)
+    
+    # Diagnostic: Write directly to a debug file to verify logging configuration
+    try:
+        import json
+        from datetime import datetime
+        idx = config.participant['device_args']['idx']
+        log_dir = config.participant['tracking_args']['log_dir']
+        scenario_name = config.participant['scenario_args']['name']
+        diagnostic_file = os.path.join(log_dir, scenario_name, f"participant_{idx}_diagnostic.txt")
+        with open(diagnostic_file, 'w') as f:
+            f.write(f"=== NEBULA Node Diagnostic Log ===\n")
+            f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+            f.write(f"Participant ID: {idx}\n")
+            f.write(f"Config Path: {config_path}\n")
+            f.write(f"Logging Enabled: {config.participant['device_args']['logging']}\n")
+            f.write(f"Logging Type: {type(config.participant['device_args']['logging'])}\n")
+            f.write(f"Log Directory: {log_dir}\n")
+            f.write(f"Scenario Name: {scenario_name}\n")
+            f.write(f"Dataset: {config.participant['data_args']['dataset']}\n")
+            f.write(f"Model: {config.participant['model_args']['model']}\n")
+            f.write(f"Python Logging Level: {logging.getLogger().level}\n")
+            f.write(f"Python Logging Handlers: {logging.getLogger().handlers}\n")
+            f.write(f"\n=== Config JSON ===\n")
+            f.write(json.dumps(config.participant, indent=2))
+            f.flush()
+        logging.info(f"Diagnostic file written to: {diagnostic_file}")
+    except Exception as e:
+        print(f"ERROR writing diagnostic file: {e}", file=sys.stderr)
 
     try:
         asyncio.run(main(config), debug=False)

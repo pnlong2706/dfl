@@ -19,6 +19,7 @@ from torch.nn import functional as F
 from nebula.config.config import TRAINING_LOGGER
 from nebula.core.utils.deterministic import enable_deterministic
 from nebula.core.utils.nebulalogger_tensorboard import NebulaTensorBoardLogger
+from nebula.core.utils.nebulalogger_json import NebulaJSONLogger
 from nebula.core.nebulaevents import TestMetricsEvent
 from nebula.core.eventmanager import EventManager
 
@@ -135,7 +136,9 @@ class Lightning:
         self.idx = self.config.participant["device_args"]["idx"]
         self.log_dir = os.path.join(self.config.participant["tracking_args"]["log_dir"], self.experiment_name)
         self._logger = None
+        self.json_logger = None
         self.create_logger()
+        self.create_json_logger()
         enable_deterministic(seed=self.config.participant["scenario_args"]["random_seed"])
 
     @property
@@ -171,6 +174,24 @@ class Lightning:
             nebulalogger = None
 
         self._logger = nebulalogger
+
+    def create_json_logger(self):
+        """Create JSON logger for structured metrics logging."""
+        try:
+            logging_training.info(f"[JSON Logger] Creating JSON logger for participant {self.idx}")
+            logging_training.info(f"[JSON Logger] Log directory: {self.log_dir}")
+            logging_training.info(f"[JSON Logger] Experiment name: {self.experiment_name}")
+            self.json_logger = NebulaJSONLogger(
+                log_dir=self.log_dir,
+                participant_id=self.idx,
+                scenario_name=self.experiment_name
+            )
+            logging_training.info(f"[JSON Logger] JSON logger created successfully for participant {self.idx}")
+        except Exception as e:
+            logging_training.error(f"[JSON Logger] Failed to create JSON logger: {e}")
+            import traceback
+            logging_training.error(f"[JSON Logger] Traceback: {traceback.format_exc()}")
+            self.json_logger = None
 
     def create_trainer(self):
         # Create a new trainer and logger for each round
@@ -248,9 +269,53 @@ class Lightning:
         self.epochs = epochs
 
     def set_current_round(self, round):
-        logging.info(f"Update | current round = {round}")
+        logging_training.info(f"Update | current round = {round}")
         self.round = round
         self.model.set_updated_round(round)
+
+        # Start JSON logging for this round
+        if self.json_logger is not None:
+            try:
+                logging_training.info(f"[JSON Logger] Starting round {round} logging")
+                self.json_logger.start_round(round)
+            except Exception as e:
+                logging_training.error(f"[JSON Logger] Failed to start JSON logging for round {round}: {e}")
+                import traceback
+                logging_training.error(f"[JSON Logger] Traceback: {traceback.format_exc()}")
+        else:
+            logging_training.warning(f"[JSON Logger] JSON logger is None, cannot start round {round}")
+
+    def _log_dataset_sizes(self):
+        """Log the number of samples in training, validation, and test datasets."""
+        if self.json_logger is None:
+            return
+
+        try:
+            # Ensure datamodule is set up
+            if self.datamodule is None:
+                logging.warning("Datamodule not set, cannot log dataset sizes")
+                return
+
+            # Get dataset sizes
+            num_train = len(self.datamodule.data_train) if self.datamodule.data_train is not None else 0
+            num_val = len(self.datamodule.data_val) if self.datamodule.data_val is not None else 0
+            num_test_local = len(self.datamodule.local_te_subset) if self.datamodule.local_te_subset is not None else 0
+            num_test_global = len(self.datamodule.global_te_subset) if self.datamodule.global_te_subset is not None else 0
+
+            # Log to JSON logger
+            self.json_logger.log_dataset_info(
+                num_train_samples=num_train,
+                num_val_samples=num_val if num_val > 0 else None,
+                num_test_local_samples=num_test_local if num_test_local > 0 else None,
+                num_test_global_samples=num_test_global if num_test_global > 0 else None
+            )
+
+            # Also log to standard logger
+            logging.info(f"Dataset sizes - Train: {num_train}, Val: {num_val}, "
+                        f"Test (Local): {num_test_local}, Test (Global): {num_test_global}")
+
+        except Exception as e:
+            logging.warning(f"Failed to log dataset sizes: {e}")
 
     def get_current_loss(self):
         return self.model.get_loss()
@@ -303,6 +368,13 @@ class Lightning:
 
     def _train_sync(self):
         try:
+            # Pass JSON logger to model
+            if self.json_logger is not None:
+                self.model.json_logger = self.json_logger
+
+            # Log dataset sizes at the beginning of training
+            self._log_dataset_sizes()
+
             self._trainer.fit(self.model, self.datamodule)
         except Exception as e:
             logging_training.error(f"Error in _train_sync: {e}")
@@ -324,10 +396,15 @@ class Lightning:
 
     def _test_sync(self):
         try:
+            # Pass JSON logger to model
+            if self.json_logger is not None:
+                self.model.json_logger = self.json_logger
+
             self._trainer.test(self.model, self.datamodule, verbose=True)
             metrics = self._trainer.callback_metrics
             loss = metrics.get('val_loss/dataloader_idx_0', None).item()
             accuracy = metrics.get('val_accuracy/dataloader_idx_0', None).item()
+
             return loss, accuracy
         except Exception as e:
             logging_training.error(f"Error in _test_sync: {e}")
@@ -357,11 +434,24 @@ class Lightning:
         # self.reporter.enqueue_data("Round", self.round)
 
     def on_round_end(self):
+        # End JSON logging for this round
+        if self.json_logger is not None:
+            try:
+                logging_training.info(f"[JSON Logger] Ending round {self.round} logging")
+                self.json_logger.end_round()
+                logging_training.info(f"[JSON Logger] Round {self.round} ended successfully")
+            except Exception as e:
+                logging_training.error(f"[JSON Logger] Failed to end JSON logging for round {self.round}: {e}")
+                import traceback
+                logging_training.error(f"[JSON Logger] Traceback: {traceback.format_exc()}")
+        else:
+            logging_training.warning(f"[JSON Logger] JSON logger is None, cannot end round {self.round}")
+        
         self._logger.global_step = self._logger.global_step + self._logger.local_step
         self._logger.local_step = 0
         self.round += 1
         self.model.on_round_end()
-        logging.info("Flushing memory cache at the end of round...")
+        logging_training.info("Flushing memory cache at the end of round...")
         self.cleanup()
 
     def on_learning_cycle_end(self):
