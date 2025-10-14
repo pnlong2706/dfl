@@ -5,6 +5,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from nebula.config.config import TRAINING_LOGGER
+
+# Use both loggers - main logger and training logger
+logger = logging.getLogger(__name__)
+logging_training = logging.getLogger(TRAINING_LOGGER)
+
+
+def _log_both(level, message):
+    """Helper function to log to both main and training loggers."""
+    log_func = getattr(logger, level)
+    log_func(message)
+    log_func_training = getattr(logging_training, level)
+    log_func_training(message)
+
 
 class NebulaJSONLogger:
     """
@@ -50,10 +64,10 @@ class NebulaJSONLogger:
 
         self.current_round_data = None
 
-        logging.info(f"JSON Logger initialized for participant {participant_id}")
-        logging.info(f"  Metrics file: {self.metrics_file}")
-        logging.info(f"  Rounds file: {self.rounds_file}")
-        logging.info(f"  Summary file: {self.summary_file}")
+        _log_both('info', f"JSON Logger initialized for participant {participant_id}")
+        _log_both('info', f"  Metrics file: {self.metrics_file}")
+        _log_both('info', f"  Rounds file: {self.rounds_file}")
+        _log_both('info', f"  Summary file: {self.summary_file}")
 
     def start_round(self, round_num: int, **kwargs):
         """Start logging a new round."""
@@ -68,13 +82,13 @@ class NebulaJSONLogger:
             "network": {},
             "metadata": kwargs
         }
-        logging.info(f"[JSON Logger] Started logging round {round_num}")
+        _log_both('info', f"[JSON Logger] Started logging round {round_num}")
 
     def log_dataset_info(self, num_train_samples: int, num_val_samples: int = None,
                         num_test_local_samples: int = None, num_test_global_samples: int = None):
         """Log dataset information at the beginning of a round."""
         if self.current_round_data is None:
-            logging.warning("[JSON Logger] No active round. Call start_round() first.")
+            _log_both('warning', "[JSON Logger] No active round. Call start_round() first.")
             return
 
         dataset_info = {
@@ -99,12 +113,12 @@ class NebulaJSONLogger:
         if num_test_global_samples is not None:
             info_str += f", Test (Global) samples: {num_test_global_samples}"
 
-        logging.info(f"[Dataset Info] {info_str}")
+        _log_both('info', f"[Dataset Info] {info_str}")
 
     def log_training_metrics(self, epoch: int, metrics: Dict[str, Any]):
         """Log training metrics for an epoch."""
         if self.current_round_data is None:
-            logging.warning("[JSON Logger] No active round. Call start_round() first.")
+            _log_both('warning', "[JSON Logger] No active round. Call start_round() first.")
             return
 
         if "epochs" not in self.current_round_data["training"]:
@@ -120,12 +134,12 @@ class NebulaJSONLogger:
         # Log to console
         metrics_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: {v}"
                                 for k, v in metrics.items()])
-        logging.info(f"[Training] Epoch {epoch} - {metrics_str}")
+        _log_both('info', f"[Training] Epoch {epoch} - {metrics_str}")
 
     def log_validation_metrics(self, metrics: Dict[str, Any]):
         """Log validation metrics."""
         if self.current_round_data is None:
-            logging.warning("[JSON Logger] No active round. Call start_round() first.")
+            _log_both('warning', "[JSON Logger] No active round. Call start_round() first.")
             return
 
         self.current_round_data["validation"] = {
@@ -136,12 +150,12 @@ class NebulaJSONLogger:
         # Log to console
         metrics_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: {v}"
                                 for k, v in metrics.items()])
-        logging.info(f"[Validation] {metrics_str}")
+        _log_both('info', f"[Validation] {metrics_str}")
 
     def log_test_metrics(self, phase: str, metrics: Dict[str, Any]):
         """Log test metrics (local or global)."""
         if self.current_round_data is None:
-            logging.warning("[JSON Logger] No active round. Call start_round() first.")
+            _log_both('warning', "[JSON Logger] No active round. Call start_round() first.")
             return
 
         phase_key = "test_local" if "Local" in phase else "test_global"
@@ -153,24 +167,25 @@ class NebulaJSONLogger:
         # Log to console
         metrics_str = ", ".join([f"{k}: {v:.4f}" if isinstance(v, (int, float)) else f"{k}: {v}"
                                 for k, v in metrics.items()])
-        logging.info(f"[{phase}] {metrics_str}")
+        _log_both('info', f"[{phase}] {metrics_str}")
 
     def log_network_info(self, **kwargs):
         """Log network information (neighbors, role, etc.)."""
         if self.current_round_data is None:
-            logging.warning("[JSON Logger] No active round. Call start_round() first.")
+            _log_both('warning', "[JSON Logger] No active round. Call start_round() first.")
             return
 
         self.current_round_data["network"].update(self._convert_tensors(kwargs))
 
         # Log to console
         info_str = ", ".join([f"{k}: {v}" for k, v in kwargs.items()])
-        logging.info(f"[Network] {info_str}")
+        _log_both('info', f"[Network] {info_str}")
 
     def end_round(self):
         """End the current round and save data."""
+        _log_both('info', "[JSON Logger] end_round() called")
         if self.current_round_data is None:
-            logging.warning("[JSON Logger] No active round to end.")
+            _log_both('warning', "[JSON Logger] No active round to end.")
             return
 
         self.current_round_data["end_time"] = datetime.now().isoformat()
@@ -188,7 +203,7 @@ class NebulaJSONLogger:
         self._save_round_summary()
 
         round_num = self.current_round_data["round"]
-        logging.info(f"[JSON Logger] Finished logging round {round_num} "
+        _log_both('info', f"[JSON Logger] Finished logging round {round_num} "
                     f"(duration: {self.current_round_data['duration_seconds']:.2f}s)")
 
         self.current_round_data = None
@@ -206,7 +221,7 @@ class NebulaJSONLogger:
         self._save_metrics()
         self._create_summary()
 
-        logging.info(f"[JSON Logger] Experiment ended. Total duration: "
+        _log_both('info', f"[JSON Logger] Experiment ended. Total duration: "
                     f"{self.metrics_data['total_duration_seconds']:.2f}s")
 
     def _convert_tensors(self, data: Any) -> Any:
@@ -229,8 +244,12 @@ class NebulaJSONLogger:
         try:
             with open(self.metrics_file, 'w') as f:
                 json.dump(self.metrics_data, f, indent=2)
+                f.flush()  # Ensure data is written to disk
+            _log_both('info', f"[JSON Logger] Metrics saved to {self.metrics_file}")
         except Exception as e:
-            logging.error(f"[JSON Logger] Error saving metrics: {e}")
+            _log_both('error', f"[JSON Logger] Error saving metrics to {self.metrics_file}: {e}")
+            import traceback
+            _log_both('error', f"[JSON Logger] Traceback: {traceback.format_exc()}")
 
     def _save_round_summary(self):
         """Save individual round data to separate file."""
@@ -248,8 +267,12 @@ class NebulaJSONLogger:
 
             with open(self.rounds_file, 'w') as f:
                 json.dump(rounds_data, f, indent=2)
+                f.flush()  # Ensure data is written to disk
+            _log_both('info', f"[JSON Logger] Round summary saved to {self.rounds_file}")
         except Exception as e:
-            logging.error(f"[JSON Logger] Error saving round summary: {e}")
+            _log_both('error', f"[JSON Logger] Error saving round summary to {self.rounds_file}: {e}")
+            import traceback
+            _log_both('error', f"[JSON Logger] Traceback: {traceback.format_exc()}")
 
     def _create_summary(self):
         """Create a summary of the experiment."""
@@ -285,7 +308,10 @@ class NebulaJSONLogger:
         try:
             with open(self.summary_file, 'w') as f:
                 json.dump(summary, f, indent=2)
+                f.flush()  # Ensure data is written to disk
 
-            logging.info(f"[JSON Logger] Summary saved to {self.summary_file}")
+            _log_both('info', f"[JSON Logger] Summary saved to {self.summary_file}")
         except Exception as e:
-            logging.error(f"[JSON Logger] Error creating summary: {e}")
+            _log_both('error', f"[JSON Logger] Error creating summary at {self.summary_file}: {e}")
+            import traceback
+            _log_both('error', f"[JSON Logger] Traceback: {traceback.format_exc()}")

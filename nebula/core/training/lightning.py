@@ -395,13 +395,6 @@ class Lightning:
             loss = metrics.get('val_loss/dataloader_idx_0', None).item()
             accuracy = metrics.get('val_accuracy/dataloader_idx_0', None).item()
 
-            # End round logging after test
-            if self.json_logger is not None:
-                try:
-                    self.json_logger.end_round()
-                except Exception as e:
-                    logging.warning(f"Failed to end JSON logging for round: {e}")
-
             return loss, accuracy
         except Exception as e:
             logging_training.error(f"Error in _test_sync: {e}")
@@ -431,6 +424,13 @@ class Lightning:
         # self.reporter.enqueue_data("Round", self.round)
 
     def on_round_end(self):
+        # End JSON logging for this round
+        if self.json_logger is not None:
+            try:
+                self.json_logger.end_round()
+            except Exception as e:
+                logging.warning(f"Failed to end JSON logging for round: {e}")
+        
         self._logger.global_step = self._logger.global_step + self._logger.local_step
         self._logger.local_step = 0
         self.round += 1
