@@ -130,7 +130,7 @@ class Lightning:
         self.datamodule = datamodule
         self.config = config
         self._trainer = None
-        self.epochs = 1
+        self.epochs = 2
         self.round = 0
         self.experiment_name = self.config.participant["scenario_args"]["name"]
         self.idx = self.config.participant["device_args"]["idx"]
@@ -208,6 +208,7 @@ class Lightning:
             self._trainer = Trainer(
                 callbacks=[ModelSummary(max_depth=1), NebulaProgressBar()],
                 max_epochs=self.epochs,
+                min_epochs=self.epochs,
                 accelerator="gpu",
                 devices=gpu_index,
                 logger=self._logger,
@@ -446,7 +447,7 @@ class Lightning:
                 logging_training.error(f"[JSON Logger] Traceback: {traceback.format_exc()}")
         else:
             logging_training.warning(f"[JSON Logger] JSON logger is None, cannot end round {self.round}")
-        
+
         self._logger.global_step = self._logger.global_step + self._logger.local_step
         self._logger.local_step = 0
         self.round += 1
