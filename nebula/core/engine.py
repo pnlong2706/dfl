@@ -736,6 +736,13 @@ class Engine:
         try:
             if self.round is None:
                 self.total_rounds = self.config.participant["scenario_args"]["rounds"]
+
+                # If pseudo aggregation is enabled, double the total rounds
+                # Each "logical round" becomes 2 physical rounds (pseudo + actual)
+                if self._pseudo_agg_enabled:
+                    self.total_rounds = self.total_rounds * 2
+                    logging.info(f"Pseudo Aggregation enabled: Doubling rounds from {self.config.participant['scenario_args']['rounds']} to {self.total_rounds}")
+
                 epochs = self.config.participant["training_args"]["epochs"]
                 await self.get_round_lock().acquire_async()
                 self.round = 0
@@ -901,8 +908,10 @@ class Engine:
 
                     round_type = "Pseudo Aggregation" if self._is_pseudo_round else "Actual Aggregation"
                     round_with_phase = self.get_round_with_phase()
+                    # Show max rounds adjusted for display (total_rounds already doubled internally)
+                    max_logical_rounds = self.total_rounds // 2
                     print_msg_box(
-                        msg=f"Round {round_with_phase} ({round_type}) of {self.total_rounds - 1} started (max. {self.total_rounds} rounds)",
+                        msg=f"Round {round_with_phase} ({round_type}) | Physical: {self.round}/{self.total_rounds - 1} | Logical: {int(round_with_phase)}/{max_logical_rounds}",
                         indent=2,
                         title="Round information",
                     )
