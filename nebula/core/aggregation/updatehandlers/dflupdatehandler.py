@@ -1,7 +1,8 @@
+import copy
 import logging
 import time
-from collections import deque
-from typing import TYPE_CHECKING
+from collections import OrderedDict, deque
+from typing import TYPE_CHECKING, Optional
 
 from nebula.core.aggregation.updatehandlers.updatehandler import UpdateHandler
 from nebula.core.eventmanager import EventManager
@@ -70,6 +71,12 @@ class DFLUpdateHandler(UpdateHandler):
         self._notification = False
         self._missing_ones = set()
         self._nodes_using_historic = set()
+
+        # Pseudo Aggregation: EMA storage for neighbor models
+        self._old_models: dict[str, OrderedDict] = {}  # neighbor_id -> previous model state_dict
+        self._ema_deltas: dict[str, OrderedDict] = {}  # neighbor_id -> EMA of deltaW
+        self._pseudo_agg_enabled = False
+        self._ema_alpha = 0.25  # Default EMA weight for new delta (will be overridden by config)
 
     @property
     def us(self):
@@ -163,6 +170,10 @@ class DFLUpdateHandler(UpdateHandler):
                 logging.info(
                     f"Storage Update | source={source} | round={round} | weight={weight} | federation nodes: {self._sources_expected}"
                 )
+
+                # Update EMA if pseudo aggregation is enabled (for actual aggregation rounds)
+                if self._pseudo_agg_enabled:
+                    self.update_ema(source, model)
 
                 self._sources_received.add(source)
                 updates_left = self._sources_expected.difference(self._sources_received)
@@ -309,3 +320,166 @@ class DFLUpdateHandler(UpdateHandler):
                 await self._round_updates_lock.release_async()
             all_received = True
         return all_received
+
+    # ========== Pseudo Aggregation Methods ==========
+
+    def enable_pseudo_aggregation(self, ema_alpha: float = 0.25):
+        """
+        Enable pseudo aggregation with specified EMA alpha.
+
+        Args:
+            ema_alpha (float): Weight for new delta in EMA calculation (default: 0.25).
+                             EMA_new = (1 - ema_alpha) * EMA_old + ema_alpha * delta
+        """
+        self._pseudo_agg_enabled = True
+        self._ema_alpha = ema_alpha
+        logging.info(f"Pseudo Aggregation enabled with EMA alpha={ema_alpha}")
+
+    def disable_pseudo_aggregation(self):
+        """Disable pseudo aggregation and clear EMA storage."""
+        self._pseudo_agg_enabled = False
+        self._old_models.clear()
+        self._ema_deltas.clear()
+        logging.info("Pseudo Aggregation disabled")
+
+    def store_old_model(self, neighbor_id: str, model_state_dict: OrderedDict):
+        """
+        Store a neighbor's model for future EMA calculation.
+
+        Args:
+            neighbor_id (str): Identifier of the neighbor node.
+            model_state_dict (OrderedDict): Model state dictionary to store.
+        """
+        self._old_models[neighbor_id] = copy.deepcopy(model_state_dict)
+        logging.debug(f"Stored old model from neighbor {neighbor_id}")
+
+    def update_ema(self, neighbor_id: str, new_model_state_dict: OrderedDict):
+        """
+        Update EMA when receiving new model from neighbor.
+
+        This method:
+        1. Calculates deltaW = newW - oldW
+        2. Updates EMA: EMA_new = (1 - alpha) * EMA_old + alpha * deltaW
+        3. Stores newW as oldW for next round
+
+        Args:
+            neighbor_id (str): Identifier of the neighbor node.
+            new_model_state_dict (OrderedDict): Newly received model state dictionary.
+        """
+        if not self._pseudo_agg_enabled:
+            return
+
+        if neighbor_id not in self._old_models:
+            # First time receiving from this neighbor, just store
+            self.store_old_model(neighbor_id, new_model_state_dict)
+            logging.info(f"First model received from neighbor {neighbor_id}, stored as baseline (no EMA yet)")
+            return
+
+        # Calculate delta: newW - oldW
+        old_model = self._old_models[neighbor_id]
+        delta = OrderedDict()
+
+        for key in new_model_state_dict.keys():
+            if key in old_model:
+                delta[key] = new_model_state_dict[key] - old_model[key]
+            else:
+                # New parameter appeared, use new value as delta
+                delta[key] = new_model_state_dict[key]
+
+        # Update EMA
+        if neighbor_id not in self._ema_deltas:
+            # First delta calculation, initialize EMA with this delta
+            self._ema_deltas[neighbor_id] = delta
+            logging.info(f"Initialized EMA for neighbor {neighbor_id} with first delta")
+        else:
+            # Update existing EMA: EMA_new = (1 - alpha) * EMA_old + alpha * delta
+            old_ema = self._ema_deltas[neighbor_id]
+            new_ema = OrderedDict()
+
+            for key in delta.keys():
+                if key in old_ema:
+                    new_ema[key] = (1 - self._ema_alpha) * old_ema[key] + self._ema_alpha * delta[key]
+                else:
+                    # New parameter in delta, initialize with current delta
+                    new_ema[key] = delta[key]
+
+            self._ema_deltas[neighbor_id] = new_ema
+            logging.debug(f"Updated EMA for neighbor {neighbor_id}")
+
+        # Store new model as old for next round
+        self.store_old_model(neighbor_id, new_model_state_dict)
+
+    def predict_neighbor_model(self, neighbor_id: str) -> Optional[OrderedDict]:
+        """
+        Predict neighbor's model using oldW + EMA for pseudo aggregation.
+
+        Prediction formula: predictedW = oldW + EMA
+
+        Args:
+            neighbor_id (str): Identifier of the neighbor to predict.
+
+        Returns:
+            OrderedDict: Predicted model state dict, or None if no history available.
+        """
+        if not self._pseudo_agg_enabled:
+            logging.warning("Pseudo aggregation is not enabled, cannot predict models")
+            return None
+
+        if neighbor_id not in self._old_models:
+            # No history for this neighbor, skip prediction
+            logging.debug(f"No history for neighbor {neighbor_id}, skipping prediction")
+            return None
+
+        old_model = self._old_models[neighbor_id]
+
+        if neighbor_id not in self._ema_deltas:
+            # Have oldW but no EMA yet (only received once)
+            # Predict no change: return old model as-is
+            logging.debug(f"No EMA for neighbor {neighbor_id}, predicting no change (using old model)")
+            return copy.deepcopy(old_model)
+
+        # Predict: oldW + EMA
+        ema = self._ema_deltas[neighbor_id]
+        predicted = OrderedDict()
+
+        for key in old_model.keys():
+            if key in ema:
+                predicted[key] = old_model[key] + ema[key]
+            else:
+                # Parameter exists in old model but not in EMA, keep old value
+                predicted[key] = old_model[key]
+
+        logging.debug(f"Predicted model for neighbor {neighbor_id}")
+        return predicted
+
+    async def get_predicted_models(self, federation_nodes: set) -> dict:
+        """
+        Get predicted models for all federation nodes for pseudo aggregation.
+
+        Args:
+            federation_nodes (set): Set of neighbor node IDs.
+
+        Returns:
+            dict: Dictionary mapping neighbor_id to (predicted_model, weight) tuples.
+                 Only includes neighbors with available predictions.
+        """
+        predicted_models = {}
+        skipped_neighbors = []
+
+        for neighbor_id in federation_nodes:
+            predicted_model = self.predict_neighbor_model(neighbor_id)
+            if predicted_model is not None:
+                # Use weight=1 for predicted models (can be adjusted later)
+                predicted_models[neighbor_id] = (predicted_model, 1.0)
+            else:
+                skipped_neighbors.append(neighbor_id)
+
+        if skipped_neighbors:
+            logging.info(
+                f"Pseudo Aggregation: Predicted {len(predicted_models)} models, "
+                f"skipped {len(skipped_neighbors)} neighbors without history: {skipped_neighbors}"
+            )
+        else:
+            logging.info(f"Pseudo Aggregation: Predicted {len(predicted_models)} models for all neighbors")
+
+        return predicted_models

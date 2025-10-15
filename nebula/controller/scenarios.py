@@ -52,6 +52,7 @@ class Scenario:
         partition_parameter,
         model,
         agg_algorithm,
+        pseudo_aggregation,
         rounds,
         logginglevel,
         report_status_data_queue,
@@ -129,6 +130,7 @@ class Scenario:
             partition_parameter (float): Parameter for partition selection.
             model (str): Name of the model.
             agg_algorithm (str): Aggregation algorithm.
+            pseudo_aggregation (dict): Pseudo aggregation configuration with 'enabled' and 'ema_alpha'.
             rounds (int): Number of rounds.
             logginglevel (bool): Whether to log.
             report_status_data_queue (bool): Whether to report status data.
@@ -177,6 +179,7 @@ class Scenario:
         self.partition_parameter = partition_parameter
         self.model = model
         self.agg_algorithm = agg_algorithm
+        self.pseudo_aggregation = pseudo_aggregation if pseudo_aggregation else {"enabled": False, "ema_alpha": 0.25}
         self.rounds = rounds
         self.logginglevel = logginglevel
         self.report_status_data_queue = report_status_data_queue
@@ -694,6 +697,7 @@ class ScenarioManagement:
             participant_config["device_args"]["gpu_id"] = self.scenario.gpu_id
             participant_config["device_args"]["logging"] = self.scenario.logginglevel
             participant_config["aggregator_args"]["algorithm"] = self.scenario.agg_algorithm
+            participant_config["aggregator_args"]["pseudo_aggregation"] = self.scenario.pseudo_aggregation
             # To be sure that benign nodes have no attack parameters
             if node_config["role"] == "malicious":
                 participant_config["adversarial_args"]["fake_behavior"] = node_config["fake_behavior"]

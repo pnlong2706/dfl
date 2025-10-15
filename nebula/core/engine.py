@@ -109,6 +109,11 @@ class Engine:
         self.initialized = False
         self.log_dir = os.path.join(config.participant["tracking_args"]["log_dir"], self.experiment_name)
 
+        # Pseudo Aggregation configuration
+        self._pseudo_agg_enabled = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("enabled", False)
+        self._pseudo_agg_ema_alpha = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("ema_alpha", 0.25)
+        self._is_pseudo_round = False  # Track whether current round is pseudo or actual
+
         self.security = security
 
         self._trainer = trainer(model, datamodule, config=self.config)
@@ -242,6 +247,42 @@ class Engine:
         logging.info(f"🤖  Update round count | from: {self.round} | to round: {new_round}")
         self.round = new_round
         self.trainer.set_current_round(new_round)
+
+    def is_pseudo_aggregation_enabled(self):
+        """Check if pseudo aggregation is enabled in configuration."""
+        return self._pseudo_agg_enabled
+
+    def is_pseudo_round(self):
+        """Check if current round is a pseudo aggregation round."""
+        return self._is_pseudo_round
+
+    def get_round_with_phase(self):
+        """
+        Get current round number with phase indicator for pseudo aggregation.
+
+        Returns:
+            float: Round number (e.g., 1.0 for actual, 1.5 for pseudo, 2.0 for actual, etc.)
+        """
+        if not self._pseudo_agg_enabled:
+            return float(self.round)
+
+        # Round 0 (initialization): actual only
+        if self.round == 0:
+            return 0.0
+
+        # Round 1: actual only (need initial models from neighbors)
+        if self.round == 1:
+            return 1.0
+
+        # Round 2+: determine phase based on even/odd
+        # Even rounds: pseudo (1.5, 2.5, 3.5...)
+        # Odd rounds (3, 5, 7...): actual (2.0, 3.0, 4.0...)
+        if self.round % 2 == 0:
+            # Even round number = pseudo phase
+            return (self.round / 2) + 0.5
+        else:
+            # Odd round number = actual phase
+            return (self.round + 1) / 2
 
     """                                                     ##############################
                                                             #       MODEL CALLBACKS      #
@@ -619,6 +660,12 @@ class Engine:
         the federated learning process starts.
         """
         await self.aggregator.init()
+
+        # Enable pseudo aggregation in update handler if configured
+        if self._pseudo_agg_enabled:
+            logging.info(f"Enabling Pseudo Aggregation with EMA alpha={self._pseudo_agg_ema_alpha}")
+            self.aggregator.us.enable_pseudo_aggregation(ema_alpha=self._pseudo_agg_ema_alpha)
+
         if "situational_awareness" in self.config.participant:
             await self.sa.init()
         if self.config.participant["defense_args"]["reputation"]["enabled"]:
@@ -740,9 +787,19 @@ class Engine:
 
         This method is called after local training and before proceeding to the next round,
         ensuring the model is synchronized with the federation's latest aggregated state.
+
+        For pseudo aggregation rounds, uses predicted models instead of waiting for real updates.
         """
         logging.info(f"💤  Waiting convergence in round {self.round}.")
-        params = await self.aggregator.get_aggregation()
+
+        # Choose aggregation method based on round type
+        if self._is_pseudo_round:
+            logging.info(f"🔮  Pseudo aggregation round - using predicted models")
+            params = await self.aggregator.get_pseudo_aggregation()
+        else:
+            logging.info(f"📡  Actual aggregation round - waiting for real model updates")
+            params = await self.aggregator.get_aggregation()
+
         if params is not None:
             logging.info(
                 f"_waiting_model_updates | Aggregation done for round {self.round}, including parameters in local model."
@@ -832,14 +889,33 @@ class Engine:
         while self.round is not None and self.round < self.total_rounds:
             async with self._round_in_process_lock:
                 current_time = time.time()
-                print_msg_box(
-                    msg=f"Round {self.round} of {self.total_rounds - 1} started (max. {self.total_rounds} rounds)",
-                    indent=2,
-                    title="Round information",
-                )
-                
+
+                # Determine if this is a pseudo aggregation round
+                if self._pseudo_agg_enabled:
+                    # Round 0 and 1: actual only
+                    if self.round <= 1:
+                        self._is_pseudo_round = False
+                    else:
+                        # Round 2+: even rounds are pseudo, odd rounds are actual
+                        self._is_pseudo_round = (self.round % 2 == 0)
+
+                    round_type = "Pseudo Aggregation" if self._is_pseudo_round else "Actual Aggregation"
+                    round_with_phase = self.get_round_with_phase()
+                    print_msg_box(
+                        msg=f"Round {round_with_phase} ({round_type}) of {self.total_rounds - 1} started (max. {self.total_rounds} rounds)",
+                        indent=2,
+                        title="Round information",
+                    )
+                else:
+                    self._is_pseudo_round = False
+                    print_msg_box(
+                        msg=f"Round {self.round} of {self.total_rounds - 1} started (max. {self.total_rounds} rounds)",
+                        indent=2,
+                        title="Round information",
+                    )
+
                 await self.update_self_role()
-                
+
                 logging.info(f"Federation nodes: {self.federation_nodes}")
                 await self.update_federation_nodes(
                     await self.cm.get_addrs_current_connections(only_direct=True, myself=True)

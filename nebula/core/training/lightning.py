@@ -131,7 +131,9 @@ class Lightning:
         self.config = config
         self._trainer = None
         self.epochs = 2
+        self.base_epochs = 2  # Store base epochs for pseudo aggregation splitting
         self.round = 0
+        self.is_pseudo_round = False  # Track if current round is pseudo aggregation
         self.experiment_name = self.config.participant["scenario_args"]["name"]
         self.idx = self.config.participant["device_args"]["idx"]
         self.log_dir = os.path.join(self.config.participant["tracking_args"]["log_dir"], self.experiment_name)
@@ -268,6 +270,28 @@ class Lightning:
 
     def set_epochs(self, epochs):
         self.epochs = epochs
+        self.base_epochs = epochs  # Update base epochs as well
+
+    def adjust_epochs_for_pseudo_agg(self, is_pseudo_round: bool):
+        """
+        Adjust training epochs based on whether this is a pseudo aggregation round.
+
+        For pseudo aggregation:
+        - Pseudo round: train for base_epochs // 2
+        - Actual round: train for base_epochs - (base_epochs // 2)
+
+        Args:
+            is_pseudo_round (bool): Whether this is a pseudo aggregation round
+        """
+        self.is_pseudo_round = is_pseudo_round
+        if is_pseudo_round:
+            # Pseudo round: first half of epochs
+            self.epochs = self.base_epochs // 2
+            logging_training.info(f"Pseudo round: training for {self.epochs} epochs (half of {self.base_epochs})")
+        else:
+            # Actual round: remaining epochs
+            self.epochs = self.base_epochs - (self.base_epochs // 2)
+            logging_training.info(f"Actual round: training for {self.epochs} epochs (remainder of {self.base_epochs})")
 
     def set_current_round(self, round):
         logging_training.info(f"Update | current round = {round}")
@@ -277,8 +301,9 @@ class Lightning:
         # Start JSON logging for this round
         if self.json_logger is not None:
             try:
-                logging_training.info(f"[JSON Logger] Starting round {round} logging")
-                self.json_logger.start_round(round)
+                aggregation_type = "pseudo" if self.is_pseudo_round else "actual"
+                logging_training.info(f"[JSON Logger] Starting round {round} logging ({aggregation_type} aggregation)")
+                self.json_logger.start_round(round, aggregation_type=aggregation_type)
             except Exception as e:
                 logging_training.error(f"[JSON Logger] Failed to start JSON logging for round {round}: {e}")
                 import traceback
