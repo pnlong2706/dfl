@@ -238,18 +238,27 @@ class TrainerAggregatorRoleBehavior(RoleBehavior):
     
     async def extended_learning_cycle(self):
         await self._engine.trainer.test()
+
+        # Adjust training epochs for pseudo aggregation if enabled
+        if self._engine.is_pseudo_aggregation_enabled():
+            self._engine.trainer.adjust_epochs_for_pseudo_agg(self._engine.is_pseudo_round())
+
         await self._engine.trainning_in_progress_lock.acquire_async()
         await self._engine.trainer.train()
         await self._engine.trainning_in_progress_lock.release_async()
 
-        self_update_event = UpdateReceivedEvent(
-            self._engine.trainer.get_model_parameters(), self._engine.trainer.get_model_weight(), self._engine.addr, self._engine.round
-        )
-        await EventManager.get_instance().publish_node_event(self_update_event)
+        # Only send model updates in actual aggregation rounds
+        if not self._engine.is_pseudo_round():
+            self_update_event = UpdateReceivedEvent(
+                self._engine.trainer.get_model_parameters(), self._engine.trainer.get_model_weight(), self._engine.addr, self._engine.round
+            )
+            await EventManager.get_instance().publish_node_event(self_update_event)
 
-        mpe = ModelPropagationEvent(await self._engine.cm.get_addrs_current_connections(only_direct=True, myself=False), "stable")
-        await EventManager.get_instance().publish_node_event(mpe)
-        
+            mpe = ModelPropagationEvent(await self._engine.cm.get_addrs_current_connections(only_direct=True, myself=False), "stable")
+            await EventManager.get_instance().publish_node_event(mpe)
+        else:
+            logging.info("🔮  Pseudo round - skipping model propagation to neighbors")
+
         await self._engine._waiting_model_updates()
         
     async def select_nodes_to_wait(self):

@@ -69,10 +69,18 @@ class NebulaJSONLogger:
         _log_both('info', f"  Rounds file: {self.rounds_file}")
         _log_both('info', f"  Summary file: {self.summary_file}")
 
-    def start_round(self, round_num: int, **kwargs):
-        """Start logging a new round."""
+    def start_round(self, round_num: int, aggregation_type: str = "actual", **kwargs):
+        """
+        Start logging a new round.
+
+        Args:
+            round_num: Round number (can be float for pseudo agg, e.g., 1.5)
+            aggregation_type: Type of aggregation - "pseudo" or "actual"
+            **kwargs: Additional metadata
+        """
         self.current_round_data = {
             "round": round_num,
+            "aggregation_type": aggregation_type,
             "start_time": datetime.now().isoformat(),
             "dataset_info": {},
             "training": {},
@@ -82,7 +90,7 @@ class NebulaJSONLogger:
             "network": {},
             "metadata": kwargs
         }
-        _log_both('info', f"[JSON Logger] Started logging round {round_num}")
+        _log_both('info', f"[JSON Logger] Started logging round {round_num} ({aggregation_type} aggregation)")
 
     def log_dataset_info(self, num_train_samples: int, num_val_samples: int = None,
                         num_test_local_samples: int = None, num_test_global_samples: int = None):

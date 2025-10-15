@@ -171,6 +171,51 @@ class Aggregator(ABC):
     async def notify_all_updates_received(self):
         self._aggregation_waiting_skip.set()
 
+    async def get_pseudo_aggregation(self):
+        """
+        Perform pseudo aggregation using predicted neighbor models instead of waiting for real updates.
+
+        This method:
+        1. Skips communication and waiting for updates
+        2. Uses UpdateHandler's predict_neighbor_model() for each federation node
+        3. Aggregates predicted models with local model
+        4. Returns aggregated result
+
+        Used in pseudo aggregation rounds to save communication overhead.
+
+        Returns:
+            Any: The result of the aggregation process using predicted models.
+        """
+        logging.info("🔄  get_pseudo_aggregation | Starting pseudo aggregation with predicted models")
+
+        # Get predicted models from update handler
+        predicted_updates = await self.us.get_predicted_models(self._federation_nodes)
+
+        # Always add local model (get it directly from trainer)
+        local_model = self.engine.trainer.get_model_parameters()
+        local_weight = self.engine.trainer.get_model_weight()
+        predicted_updates[self._addr] = (local_model, local_weight)
+
+        if len(predicted_updates) == 1:
+            logging.warning(
+                "🔄  get_pseudo_aggregation | No predicted models available, using only local model"
+            )
+        else:
+            logging.info(
+                f"🔄  get_pseudo_aggregation | Aggregating with {len(predicted_updates)} models "
+                f"({len(predicted_updates) - 1} predicted + 1 local)"
+            )
+
+        # Publish aggregation event (with is_pseudo_agg metadata)
+        agg_event = AggregationEvent(predicted_updates, self._federation_nodes, set())
+        await EventManager.get_instance().publish_node_event(agg_event)
+
+        # Run aggregation with predicted models
+        aggregated_result = self.run_aggregation(predicted_updates)
+        logging.info("🔄  get_pseudo_aggregation | Pseudo aggregation completed")
+
+        return aggregated_result
+
 
 def create_aggregator(config, engine) -> Aggregator:
     from nebula.core.aggregation.fedavg import FedAvg
