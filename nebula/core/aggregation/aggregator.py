@@ -191,16 +191,16 @@ class Aggregator(ABC):
         # Get predicted models from update handler
         predicted_updates = await self.us.get_predicted_models(self._federation_nodes)
 
-        if not predicted_updates:
+        # Always add local model (get it directly from trainer)
+        local_model = self.engine.trainer.get_model_parameters()
+        local_weight = self.engine.trainer.get_model_weight()
+        predicted_updates[self._addr] = (local_model, local_weight)
+
+        if len(predicted_updates) == 1:
             logging.warning(
                 "🔄  get_pseudo_aggregation | No predicted models available, using only local model"
             )
-            # If no predictions, use only local model
-            predicted_updates = {self._addr: await self.engine.resolve_missing_updates()}
         else:
-            # Add local model to the mix
-            local_model_tuple = await self.engine.resolve_missing_updates()
-            predicted_updates[self._addr] = local_model_tuple
             logging.info(
                 f"🔄  get_pseudo_aggregation | Aggregating with {len(predicted_updates)} models "
                 f"({len(predicted_updates) - 1} predicted + 1 local)"
