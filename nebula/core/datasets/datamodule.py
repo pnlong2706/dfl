@@ -123,30 +123,20 @@ class DataModule(LightningDataModule):
         )
 
     def test_dataloader(self):
-        if self.local_te_subset is None or self.global_te_subset is None:
+        if self.global_te_subset is None:
             raise ValueError(
                 "Test datasets not initialized. Please call setup('test') before requesting test_dataloader."
             )
-        logging_training.info(f"Local test set size: {len(self.local_te_subset)}")
         logging_training.info(f"Global test set size: {len(self.global_te_subset)}")
-        return [
-            DataLoader(
-                self.local_te_subset,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_workers,
-                drop_last=True,
-                pin_memory=False,
-            ),
-            DataLoader(
-                self.global_te_subset,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_workers,
-                drop_last=True,
-                pin_memory=False,
-            ),
-        ]
+        # Only return global test set (skip local test to save computation time)
+        return DataLoader(
+            self.global_te_subset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            drop_last=True,
+            pin_memory=False,
+        )
 
     def bootstrap_dataloader(self):
         if self.data_val is None:

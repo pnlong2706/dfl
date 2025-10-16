@@ -239,15 +239,22 @@ class TrainerAggregatorRoleBehavior(RoleBehavior):
     async def extended_learning_cycle(self):
         await self._engine.trainer.test()
 
-        # Adjust training epochs for pseudo aggregation if enabled
+        # Adjust training epochs for pseudo aggregation or mid-round test
         if self._engine.is_pseudo_aggregation_enabled():
             self._engine.trainer.adjust_epochs_for_pseudo_agg(self._engine.is_pseudo_round())
+        elif self._engine.is_mid_round_test_enabled():
+            self._engine.trainer.adjust_epochs_for_mid_round_test(self._engine.is_mid_test_round())
 
         await self._engine.trainning_in_progress_lock.acquire_async()
         await self._engine.trainer.train()
         await self._engine.trainning_in_progress_lock.release_async()
 
-        # Only send model updates in actual aggregation rounds
+        # Skip communication and aggregation in mid-test rounds
+        if self._engine.is_mid_test_round():
+            logging.info("📊  Mid-test round - skipping model propagation and aggregation")
+            return  # Skip aggregation entirely
+
+        # Only send model updates in actual aggregation rounds (not in pseudo rounds)
         if not self._engine.is_pseudo_round():
             self_update_event = UpdateReceivedEvent(
                 self._engine.trainer.get_model_parameters(), self._engine.trainer.get_model_weight(), self._engine.addr, self._engine.round

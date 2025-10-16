@@ -75,12 +75,12 @@ class NebulaProgressBar(ProgressBar):
         if self.enable:
             logging_training.info(f"Validation for Epoch {trainer.current_epoch} finished")
 
-    def on_test_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx):
+    def on_test_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
         super().on_test_batch_start(trainer, pl_module, batch, batch_idx, dataloader_idx)
         if not self.has_dataloader_changed(dataloader_idx):
             return
 
-    def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         """Called at the end of each test batch."""
         super().on_test_batch_end(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
         if self.enable:
@@ -293,6 +293,25 @@ class Lightning:
             self.epochs = self.base_epochs - (self.base_epochs // 2)
             logging_training.info(f"Actual round: training for {self.epochs} epochs (remainder of {self.base_epochs})")
 
+    def adjust_epochs_for_mid_round_test(self, is_mid_test_round: bool):
+        """
+        Adjust training epochs for mid-round testing (balances computation with pseudo agg).
+
+        For mid-round testing:
+        - Both rounds: train for base_epochs // 2
+        - Mid-test round: test only, no aggregation/communication
+        - Normal round: test and aggregation/communication
+
+        Args:
+            is_mid_test_round (bool): Whether this is a mid-round test (no agg)
+        """
+        # Both mid-test and normal rounds train for half epochs
+        self.epochs = self.base_epochs // 2
+        if is_mid_test_round:
+            logging_training.info(f"Mid-test round: training for {self.epochs} epochs (half of {self.base_epochs}), no aggregation")
+        else:
+            logging_training.info(f"Normal round: training for {self.epochs} epochs (half of {self.base_epochs}), with aggregation")
+
     def set_current_round(self, round):
         logging_training.info(f"Update | current round = {round}")
         self.round = round
@@ -428,8 +447,14 @@ class Lightning:
 
             self._trainer.test(self.model, self.datamodule, verbose=True)
             metrics = self._trainer.callback_metrics
-            loss = metrics.get('val_loss/dataloader_idx_0', None).item()
-            accuracy = metrics.get('val_accuracy/dataloader_idx_0', None).item()
+            # Only global test now (single dataloader, no idx suffix)
+            loss = metrics.get('val_loss', None)
+            accuracy = metrics.get('val_accuracy', None)
+
+            if loss is not None:
+                loss = loss.item()
+            if accuracy is not None:
+                accuracy = accuracy.item()
 
             return loss, accuracy
         except Exception as e:

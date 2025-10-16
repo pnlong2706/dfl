@@ -94,7 +94,7 @@ class Engine:
         self.ip = config.participant["network_args"]["ip"]
         self.port = config.participant["network_args"]["port"]
         self.addr = config.participant["network_args"]["addr"]
-        
+
         self.name = config.participant["device_args"]["name"]
         self.client = docker.from_env()
 
@@ -113,6 +113,11 @@ class Engine:
         self._pseudo_agg_enabled = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("enabled", False)
         self._pseudo_agg_ema_alpha = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("ema_alpha", 0.25)
         self._is_pseudo_round = False  # Track whether current round is pseudo or actual
+
+        # Mid-round testing configuration (for balancing computation with pseudo agg)
+        self._mid_round_test_enabled = config.participant.get("training_args", {}).get("mid_round_test", False)
+        self._is_mid_test_round = False  # Track if this is a mid-round test (no agg, no comm)
+        logging.info(f"Mid-round testing enabled = {self._mid_round_test_enabled}")
 
         self.security = security
 
@@ -192,7 +197,7 @@ class Engine:
     def trainer(self):
         """Trainer"""
         return self._trainer
-    
+
     @property
     def rb(self):
         """Role Behavior"""
@@ -255,6 +260,14 @@ class Engine:
     def is_pseudo_round(self):
         """Check if current round is a pseudo aggregation round."""
         return self._is_pseudo_round
+
+    def is_mid_round_test_enabled(self):
+        """Check if mid-round testing is enabled in configuration."""
+        return self._mid_round_test_enabled
+
+    def is_mid_test_round(self):
+        """Check if current round is a mid-round test (no aggregation, no communication)."""
+        return self._is_mid_test_round
 
     def get_round_with_phase(self):
         """
@@ -358,7 +371,7 @@ class Engine:
 
     async def _control_leadership_transfer_callback(self, source, message):
         logging.info(f"🔧  handle_control_message | Trigger | Received leadership transfer message from {source}")
-        
+
         if await self._round_in_process_lock.locked_async():
             logging.info("Learning cycle is executing, role behavior will be modified next round")
             await self.rb.set_next_role(Role.AGGREGATOR, source_to_notificate=source)
@@ -395,7 +408,7 @@ class Engine:
             except TimeoutError:
                 logging.info("Learning cycle is locked, role behavior will be modified next round")
                 await self.rb.set_next_role(Role.TRAINER)
-        
+
 
     async def _connection_connect_callback(self, source, message):
         logging.info(f"🔗  handle_connection_message | Trigger | Received connection message from {source}")
@@ -743,6 +756,12 @@ class Engine:
                     self.total_rounds = self.total_rounds * 2
                     logging.info(f"Pseudo Aggregation enabled: Doubling rounds from {self.config.participant['scenario_args']['rounds']} to {self.total_rounds}")
 
+                # If mid-round testing is enabled (and pseudo agg is NOT), also double rounds
+                # Each "logical round" becomes 2 physical rounds (train+test+agg, train+test no-agg)
+                elif self._mid_round_test_enabled:
+                    self.total_rounds = self.total_rounds * 2
+                    logging.info(f"Mid-round testing enabled: Doubling rounds from {self.config.participant['scenario_args']['rounds']} to {self.total_rounds}")
+
                 epochs = self.config.participant["training_args"]["epochs"]
                 await self.get_round_lock().acquire_async()
                 self.round = 0
@@ -764,10 +783,10 @@ class Engine:
                 await self.get_federation_ready_lock().acquire_async()
                 if self.config.participant["device_args"]["start"]:
                     logging.info("Propagate initial model updates.")
-                    
+
                     mpe = ModelPropagationEvent(await self.cm.get_addrs_current_connections(only_direct=True, myself=False), "initialization")
                     await EventManager.get_instance().publish_node_event(mpe)
-                    
+
                     await self.get_federation_ready_lock().release_async()
 
                 self.trainer.set_epochs(epochs)
@@ -828,7 +847,7 @@ class Engine:
             return False
         else:
             return current_round >= self.total_rounds
-        
+
     async def resolve_missing_updates(self):
         """
         Delegates the resolution strategy for missing updates to the current role behavior.
@@ -842,7 +861,7 @@ class Engine:
         """
         logging.info(f"Using Role behavior: {self.rb.get_role_name()} conflict resolve strategy")
         return await self.rb.resolve_missing_updates()
-    
+
     async def update_self_role(self):
         """
         Checks whether a role update is required and performs the transition if necessary.
@@ -870,7 +889,7 @@ class Engine:
                 logging.info(f"Sending role modification ACK to transferer: {source_to_notificate}")
                 message = self.cm.create_message("control", "leadership_transfer_ack")
                 asyncio.create_task(self.cm.send_message(source_to_notificate, message))
-             
+
     async def _learning_cycle(self):
         """
         Main asynchronous loop for executing the Federated Learning process across multiple rounds.
@@ -915,8 +934,25 @@ class Engine:
                         indent=2,
                         title="Round information",
                     )
+                # Determine if this is a mid-round test (for balancing computation)
+                elif self._mid_round_test_enabled:
+                    # Round 0 and 1: normal (with aggregation)
+                    if self.round <= 1:
+                        self._is_mid_test_round = False
+                    else:
+                        # Round 2+: even rounds are mid-test (no agg), odd rounds are normal (with agg)
+                        self._is_mid_test_round = (self.round % 2 == 0)
+
+                    round_type = "Mid-Test (No Agg)" if self._is_mid_test_round else "Normal (With Agg)"
+                    max_logical_rounds = self.total_rounds // 2
+                    print_msg_box(
+                        msg=f"Round {self.round} ({round_type}) | Physical: {self.round}/{self.total_rounds - 1} | Logical: {self.round // 2}/{max_logical_rounds}",
+                        indent=2,
+                        title="Round information",
+                    )
                 else:
                     self._is_pseudo_round = False
+                    self._is_mid_test_round = False
                     print_msg_box(
                         msg=f"Round {self.round} of {self.total_rounds - 1} started (max. {self.total_rounds} rounds)",
                         indent=2,
@@ -936,10 +972,10 @@ class Engine:
                 logging.info(f"Expected nodes: {expected_nodes}")
                 direct_connections = await self.cm.get_addrs_current_connections(only_direct=True)
                 undirected_connections = await self.cm.get_addrs_current_connections(only_undirected=True)
-                
+
                 logging.info(f"Direct connections: {direct_connections} | Undirected connections: {undirected_connections}")
                 logging.info(f"[Role {self.rb.get_role_name()}] Starting learning cycle...")
-                
+
                 await self.aggregator.update_federation_nodes(expected_nodes)
                 async with self._role_behavior_performance_lock:
                     await self.rb.extended_learning_cycle()
@@ -967,13 +1003,13 @@ class Engine:
         self.trainer.on_learning_cycle_end()
 
         await self.trainer.test()
-        
+
         # Shutdown protocol
         await self._shutdown_protocol()
-            
+
     async def _shutdown_protocol(self):
         logging.info("Starting graceful shutdown process...")
-        
+
         # 1.- Publish Experiment Finish Event to the last update on modules
         logging.info("Publishing Experiment Finish Event...")
         efe = ExperimentFinishEvent()

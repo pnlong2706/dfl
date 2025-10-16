@@ -2,11 +2,9 @@
 
 ## Overview
 
-Pseudo Aggregation is a communication-efficient extension to Decentralized Federated Learning (DFL) that reduces network overhead by **50%** while maintaining model convergence.
+Pseudo Aggregation reduces communication overhead in Decentralized Federated Learning (DFL) by **50%** using Exponential Moving Average (EMA) to predict neighbor models instead of waiting for transmission.
 
 ### How It Works
-
-Instead of communicating model updates every round, Pseudo Aggregation uses **Exponential Moving Average (EMA)** to predict neighbor models:
 
 **Traditional DFL (every round):**
 ```
@@ -15,354 +13,297 @@ Train N epochs → Send model → Receive models → Aggregate → Repeat
 
 **Pseudo Aggregation (alternating rounds):**
 ```
-Round 1 (Actual):  Train N/2 epochs → Send model → Receive models → Update EMA → Aggregate
-Round 1.5 (Pseudo): Train N/2 epochs → Predict neighbor models → Aggregate (no communication)
-Round 2 (Actual):  Train N/2 epochs → Send model → Receive models → Update EMA → Aggregate
-Round 2.5 (Pseudo): Train N/2 epochs → Predict neighbor models → Aggregate (no communication)
-...
+Round 1 (Actual):   Train N/2 epochs → Send/Receive → Update EMA → Aggregate
+Round 1.5 (Pseudo): Train N/2 epochs → Predict models → Aggregate (no communication)
+Round 2 (Actual):   Train N/2 epochs → Send/Receive → Update EMA → Aggregate
+Round 2.5 (Pseudo): Train N/2 epochs → Predict models → Aggregate (no communication)
 ```
 
-### EMA-Based Model Prediction
-
-When receiving a new model from neighbor `j`:
-```
+**Model Prediction:**
+```python
+# When receiving actual model from neighbor j:
 deltaW_j = newW_j - oldW_j
-EMA_j = 0.75 * EMA_j_old + 0.25 * deltaW_j
-```
+EMA_j = (1 - alpha) * EMA_j_old + alpha * deltaW_j
 
-When predicting neighbor `j`'s model (pseudo rounds):
-```
+# When predicting in pseudo rounds:
 predictedW_j = oldW_j + EMA_j
 ```
 
 ### Key Benefits
 
-- **50% less communication** (alternating rounds skip model transmission)
-- **Reduced network bandwidth** usage
-- **Faster training** (no waiting for slow neighbors in pseudo rounds)
-- **Compatible with all aggregation algorithms** (FedAvg, Krum, Median, TrimmedMean)
-- **Works with Byzantine-robust aggregators**
+- **50% less communication** (every other round skips transmission)
+- **Faster training** (no waiting in pseudo rounds)
+- **Compatible with all aggregators** (FedAvg, Krum, Median, TrimmedMean)
+- **Same total training epochs** as traditional DFL
 
 ## Configuration
 
-### Enabling Pseudo Aggregation
+### Frontend (Recommended)
 
-Add the following to your **participant configuration JSON** file:
+Enable via the deployment UI:
+1. Check "Enable Pseudo Aggregation" in the aggregation settings
+2. Adjust EMA Alpha (default: 0.25)
+3. Deploy scenario
+
+### Manual Configuration
+
+Add to participant JSON:
 
 ```json
 {
-  "device_args": {
-    "idx": 0,
-    "role": "trainer_aggregator",
-    ...
-  },
   "aggregator_args": {
     "algorithm": "FedAvg",
-    "aggregation_timeout": 120,
+    "aggregation_timeout": 180,
     "pseudo_aggregation": {
       "enabled": true,
       "ema_alpha": 0.25
     }
   },
-  "trainer_args": {
+  "training_args": {
     "epochs": 2
   },
-  ...
+  "scenario_args": {
+    "rounds": 20
+  }
 }
 ```
 
-### Configuration Parameters
+### Parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable/disable pseudo aggregation |
-| `ema_alpha` | float | `0.25` | Weight for new delta in EMA calculation (0.0-1.0) |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `enabled` | `false` | Enable pseudo aggregation |
+| `ema_alpha` | `0.25` | Weight for new delta (0.0-1.0). Lower = more stable, Higher = more responsive |
 
-**EMA Alpha Interpretation:**
-- `ema_alpha = 0.25`: EMA updates slowly (75% history, 25% new change) - more stable but less responsive
-- `ema_alpha = 0.50`: Balanced (50% history, 50% new change)
-- `ema_alpha = 0.75`: EMA updates quickly (25% history, 75% new change) - more responsive but less stable
+**Recommended `ema_alpha` values:**
+- `0.1-0.2`: Stable predictions, slow adaptation
+- `0.25` (default): Balanced
+- `0.4-0.5`: Fast adaptation, less stable
 
-**Recommendation:** Start with default `0.25`. Increase if neighbor models change rapidly, decrease if models are stable.
+## ⚠️ IMPORTANT: Round Numbering
 
-## Round Structure
+**When pseudo aggregation is enabled, the internal round counter doubles to accommodate both actual and pseudo rounds.**
 
-With pseudo aggregation enabled, the round structure changes:
+### Example Behavior
 
-### Without Pseudo Aggregation (Traditional)
-- **Round 0:** Initialization (actual aggregation)
-- **Round 1:** Actual aggregation
-- **Round 2:** Actual aggregation
-- **Round 3:** Actual aggregation
+If you configure **20 rounds** with pseudo aggregation enabled:
+
+- **Physical rounds executed:** 40 (20 actual + 20 pseudo)
+- **Logical rounds displayed:** 0, 1.0, 1.5, 2.0, 2.5, ..., 19.5, 20.0
+- **Communication events:** ~20 (only during actual rounds)
+- **Total training epochs:** Same as 20 traditional rounds
+
+**Why this matters:**
+- Logs and metrics will show 40 physical rounds
+- JSON logs will have twice as many entries
+- Training takes the same total epochs but over more rounds
+- Network traffic is still reduced by 50%
+
+**Log interpretation:**
+```
+Round 10.0 (Actual) | Physical: 19/39 | Logical: 10/20
+```
+- **Logical round 10** = what you configured
+- **Physical round 19** = internal counter (19 actual + 19 pseudo so far)
+
+### Round Structure Details
+
+**Without Pseudo Aggregation (Traditional):**
+- Configure 20 rounds → Execute 20 rounds → 20 communication events
+
+**With Pseudo Aggregation:**
+- Configure 20 rounds → Execute 40 physical rounds → 20 communication events
+- Round 0: Initialization (actual)
+- Round 1: Actual (with communication)
+- Round 2: Pseudo (no communication)
+- Round 3: Actual (with communication)
+- Round 4: Pseudo (no communication)
 - ...
-- **Total communication events:** N rounds
+- Round 39: Actual (last round)
 
-### With Pseudo Aggregation
-- **Round 0:** Initialization (actual aggregation, full epochs)
-- **Round 1:** Actual aggregation (remaining epochs)
-- **Round 1.5:** Pseudo aggregation (half epochs)
-- **Round 2:** Actual aggregation (remaining epochs)
-- **Round 2.5:** Pseudo aggregation (half epochs)
-- ...
-- **Total communication events:** ~N/2 rounds
+## Epoch Splitting
 
-**Important:** If you configure `rounds = 100` with pseudo aggregation, you'll actually execute **200 rounds** (100 actual + 100 pseudo) but with the **same total epochs** as 100 traditional rounds.
+Training epochs are automatically divided:
+- **Pseudo round:** `epochs // 2` (e.g., 1 if epochs=2)
+- **Actual round:** `epochs - (epochs // 2)` (e.g., 1 if epochs=2)
 
-### Epoch Splitting
+Example with `epochs = 3`:
+- Pseudo: 1 epoch
+- Actual: 2 epochs
+- **Total per cycle: 3 epochs** (same as traditional)
 
-Training epochs are automatically split:
-- **Pseudo round:** `max_epochs // 2` (e.g., 1 epoch if max_epochs=2)
-- **Actual round:** `max_epochs - (max_epochs // 2)` (e.g., 1 epoch if max_epochs=2)
+## Logging
 
-Example with `max_epochs = 3`:
-- Pseudo round: 1 epoch
-- Actual round: 2 epochs
-- Total per cycle: 3 epochs (same as traditional)
+### Console Logs
 
-## Logging and Monitoring
+**Pseudo round indicators:**
+```
+🔮 Pseudo aggregation round - using predicted models
+Pseudo round: training for 1 epochs (half of 2)
+🔮 Pseudo round - skipping model propagation to neighbors
+```
+
+**Actual round indicators:**
+```
+📡 Actual aggregation round - waiting for real model updates
+Actual round: training for 1 epochs (remainder of 2)
+```
 
 ### JSON Logs
 
-Pseudo aggregation information is automatically logged to JSON files:
+Each round includes `aggregation_type`:
 
 ```json
 {
   "round": 1.5,
   "aggregation_type": "pseudo",
-  "start_time": "2025-10-16T10:30:00",
-  "dataset_info": { ... },
-  "training": { ... },
-  "test_global": { ... }
+  "training": { "loss": 0.45, "accuracy": 0.89 },
+  "test_global": { "loss": 0.52, "accuracy": 0.85 }
 }
 ```
 
-### Text Logs
+## Troubleshooting
 
-Look for these log markers:
+### "No predicted models available"
+**Cause:** Round 1 hasn't completed yet (no neighbor models received)
+**Solution:** Expected behavior. System uses only local model.
 
-**Pseudo Round Start:**
-```
-🔮  Pseudo aggregation round - using predicted models
-Pseudo round: training for 1 epochs (half of 2)
+### Slower convergence
+**Cause:** `ema_alpha` too low
+**Solution:** Increase to 0.4-0.5
+
+### Unstable convergence
+**Cause:** `ema_alpha` too high
+**Solution:** Decrease to 0.1-0.15
+
+### Aggregation timeout errors
+**Cause:** Timeout too short for actual rounds
+**Solution:** Increase `aggregation_timeout` to 180+ seconds in frontend
+
+## Technical Details
+
+### Modified Components
+
+1. **DFLUpdateHandler** - EMA storage and prediction
+2. **Aggregator** - `get_pseudo_aggregation()` bypasses waiting
+3. **Engine** - Round type tracking and conditional aggregation
+4. **RoleBehavior** - Skips `ModelPropagationEvent` in pseudo rounds
+5. **Lightning Trainer** - Epoch splitting
+6. **JSON Logger** - Tracks `aggregation_type`
+
+### Data Structures
+
+```python
+_old_models: Dict[str, OrderedDict]        # neighbor_id -> last received model
+_old_model_rounds: Dict[str, int]          # neighbor_id -> round when model was received
+_old_weight: Dict[str, float]              # neighbor_id -> original model weight
+_ema_deltas: Dict[str, OrderedDict]        # neighbor_id -> EMA of deltaW
+_max_round_staleness: int = 5              # Maximum allowed round difference
 ```
 
-**Actual Round Start:**
-```
-📡  Actual aggregation round - waiting for real model updates
-Actual round: training for 1 epochs (remainder of 2)
+### Prediction Logic with Staleness Handling
+
+```python
+def predict_neighbor_model(neighbor_id):
+    if neighbor_id not in _old_models:
+        return None  # No history yet
+
+    if neighbor_id not in _ema_deltas:
+        return _old_models[neighbor_id]  # Only received once, predict no change
+
+    predicted = _old_models[neighbor_id] + _ema_deltas[neighbor_id]
+    return predicted
+
+def get_predicted_models(federation_nodes, current_round):
+    predicted_models = {}
+
+    for neighbor_id in federation_nodes:
+        predicted_model = predict_neighbor_model(neighbor_id)
+        if predicted_model is None:
+            continue
+
+        # Check staleness
+        model_round = _old_model_rounds[neighbor_id]
+        round_diff = current_round - model_round
+
+        # Exclude if too stale (older than 5 rounds)
+        if round_diff > _max_round_staleness:
+            log(f"Excluding {neighbor_id}: {round_diff} rounds old")
+            continue
+
+        # Adjust weight based on staleness
+        base_weight = _old_weight[neighbor_id]
+        adjusted_weight = base_weight / max(1, round_diff + 1)
+
+        predicted_models[neighbor_id] = (predicted_model, adjusted_weight)
+
+    return predicted_models
 ```
 
-**Model Prediction:**
-```
-Pseudo Aggregation: Predicted 3 models for all neighbors
-```
+**Staleness handling:**
+- **Models older than 5 rounds:** Excluded from pseudo aggregation entirely
+- **Recent models (0-5 rounds old):** Weight adjusted by `base_weight / (round_diff + 1)`
+  - Same round: weight unchanged (diff=0, penalty=1)
+  - 1 round old: weight × 0.5 (diff=1, penalty=2)
+  - 2 rounds old: weight × 0.33 (diff=2, penalty=3)
+  - 5 rounds old: weight × 0.167 (diff=5, penalty=6)
 
-**Communication Skip:**
-```
-🔮  Pseudo round - skipping model propagation to neighbors
-```
+## Performance Verification
 
-## Example: MNIST with Pseudo Aggregation
+To confirm pseudo aggregation works correctly:
 
-### Configuration
+1. **Check logs for alternating round types:**
+   - "Actual Aggregation" and "Pseudo Aggregation" should alternate
+   - "🔮 Pseudo round - skipping model propagation" every other round
 
-**Topology Config (`topology.json`):**
+2. **Verify communication reduction:**
+   - Count "Sending model to" logs
+   - Should be ~50% of total rounds
+
+3. **Monitor physical vs logical rounds:**
+   - Physical rounds = 2 × configured rounds
+   - Logical rounds = configured rounds
+
+4. **Confirm no timeout in pseudo rounds:**
+   - Pseudo rounds should NOT show "Aggregation timeout: X starts..."
+   - Only actual rounds use timeout
+
+## Example Configuration
+
+**Scenario:** 4 nodes, fully connected, MNIST, 20 logical rounds
+
 ```json
 {
-  "n_nodes": 4,
-  "b_symmetric": true,
-  "undirected_neighbor_num": 3,
-  "topology": "fully_connected"
-}
-```
-
-**Participant Config (`participant_0.json`):**
-```json
-{
-  "device_args": {
-    "idx": 0,
-    "role": "trainer_aggregator",
-    "start": true,
-    "logging": true
-  },
-  "network_args": {
-    "ip": "127.0.0.1",
-    "port": 45000,
-    "neighbors": "127.0.0.1:45001 127.0.0.1:45002 127.0.0.1:45003"
-  },
-  "data_args": {
-    "dataset": "MNIST",
-    "iid": false,
-    "partition_selection": "dirichlet",
-    "partition_parameter": 0.5
-  },
-  "model_args": {
-    "model": "MLP"
-  },
-  "training_args": {
-    "trainer": "lightning",
-    "epochs": 2,
-    "batch_size": 32,
-    "optimizer": "adam",
-    "learning_rate": 0.001
-  },
   "aggregator_args": {
     "algorithm": "FedAvg",
-    "aggregation_timeout": 120,
+    "aggregation_timeout": 180,
     "pseudo_aggregation": {
       "enabled": true,
       "ema_alpha": 0.25
     }
   },
+  "training_args": {
+    "epochs": 2,
+    "batch_size": 32
+  },
   "scenario_args": {
-    "rounds": 50,
-    "name": "mnist_pseudo_agg_experiment",
-    "random_seed": 42
+    "rounds": 20
   }
 }
 ```
 
-### Expected Behavior
-
-- **Total rounds executed:** 100 (50 actual + 50 pseudo)
-- **Communication events:** ~50 (instead of 100)
-- **Training epochs per cycle:** 2 (1 pseudo + 1 actual)
-- **Round 0:** Initialization, actual aggregation (2 epochs)
-- **Round 1:** Actual aggregation (1 epoch)
-- **Round 1.5:** Pseudo aggregation (1 epoch, no communication)
-- **Round 2:** Actual aggregation (1 epoch)
-- **Round 2.5:** Pseudo aggregation (1 epoch, no communication)
-- ...
-- **Round 50:** Actual aggregation (last round)
-
-### Performance Comparison
-
-| Metric | Traditional DFL | Pseudo Aggregation |
-|--------|----------------|-------------------|
-| Communication Rounds | 50 | 25 |
-| Total Training Epochs | 100 | 100 |
-| Network Messages | ~200 | ~100 |
-| Training Time | Baseline | 30-50% faster* |
-
-*Depends on network latency and aggregation timeout
-
-## Edge Cases and Behavior
-
-### First Round (Round 0-1)
-- **Round 0:** Initialization only (if configured)
-- **Round 1:** Always actual aggregation (need initial models to build EMA)
-- No pseudo aggregation until Round 2+
-
-### New Neighbor Joins
-- If a neighbor never sent a model: **skip prediction** for that neighbor
-- If a neighbor sent only once: **predict no change** (use last model as-is)
-
-### Missing EMA History
-When a neighbor has `oldW` but no EMA yet:
-- **Prediction:** `predictedW = oldW` (assume no change)
-- **EMA initialization:** Starts after receiving second model from neighbor
-
-### Network Topology Changes
-- Pseudo aggregation automatically adapts to current federation nodes
-- New neighbors excluded from pseudo aggregation until first actual round
-
-## Troubleshooting
-
-### Issue: "No predicted models available"
-**Cause:** No neighbors have sent models yet (e.g., Round 1.5 before Round 1 completes)
-**Solution:** This is expected behavior. System will use only local model for aggregation.
-
-### Issue: Convergence slower than expected
-**Cause:** EMA alpha might be too low or model changes are too rapid
-**Solution:** Increase `ema_alpha` from 0.25 to 0.4-0.5
-
-### Issue: Convergence unstable
-**Cause:** EMA alpha might be too high
-**Solution:** Decrease `ema_alpha` from 0.25 to 0.1-0.15
-
-### Issue: JSON logs not showing aggregation_type
-**Cause:** JSON logger not created or not passing aggregation type
-**Solution:** Ensure JSON logger is enabled and check Lightning trainer initialization
-
-## Technical Implementation Details
-
-### Modified Components
-
-1. **DFLUpdateHandler** (`nebula/core/aggregation/updatehandlers/dflupdatehandler.py`)
-   - Added EMA storage: `_old_models`, `_ema_deltas`
-   - Methods: `update_ema()`, `predict_neighbor_model()`, `get_predicted_models()`
-
-2. **Aggregator** (`nebula/core/aggregation/aggregator.py`)
-   - New method: `get_pseudo_aggregation()` (bypasses waiting for updates)
-
-3. **Engine** (`nebula/core/engine.py`)
-   - Round type tracking: `_is_pseudo_round`
-   - Method: `get_round_with_phase()` returns float (e.g., 1.5 for pseudo)
-   - Chooses `get_aggregation()` vs `get_pseudo_aggregation()`
-
-4. **Role Behaviors** (`nebula/core/noderole.py`)
-   - TrainerAggregatorRoleBehavior skips `ModelPropagationEvent` in pseudo rounds
-
-5. **Lightning Trainer** (`nebula/core/training/lightning.py`)
-   - Epoch splitting: `adjust_epochs_for_pseudo_agg()`
-   - JSON logging with `aggregation_type`
-
-6. **JSON Logger** (`nebula/core/utils/nebulalogger_json.py`)
-   - Field: `aggregation_type` ("pseudo" or "actual")
-
-### Data Structures
-
-**Old Models Storage:**
-```python
-_old_models: Dict[str, OrderedDict]
-# Maps neighbor_id -> previous model state_dict
-```
-
-**EMA Storage:**
-```python
-_ema_deltas: Dict[str, OrderedDict]
-# Maps neighbor_id -> EMA of deltaW (same structure as model state_dict)
-```
-
-### Prediction Algorithm
-
-```python
-def predict_neighbor_model(neighbor_id):
-    if neighbor_id not in old_models:
-        return None  # No history
-
-    oldW = old_models[neighbor_id]
-
-    if neighbor_id not in ema_deltas:
-        return oldW  # Only received once, predict no change
-
-    ema = ema_deltas[neighbor_id]
-    predicted = {key: oldW[key] + ema[key] for key in oldW.keys()}
-    return predicted
-```
-
-## Future Enhancements
-
-Potential improvements for Pseudo Aggregation:
-
-1. **Adaptive EMA Alpha:** Automatically adjust `ema_alpha` based on prediction accuracy
-2. **Selective Pseudo Aggregation:** Only predict stable neighbors, communicate with volatile ones
-3. **Multi-step Prediction:** Allow multiple consecutive pseudo rounds (e.g., 2 pseudo, 1 actual)
-4. **Prediction Confidence:** Track and log how accurate predictions are
-5. **Gradient-based Prediction:** Predict using gradient information instead of full model deltas
-
-## References
-
-- NEBULA Documentation: https://docs.nebula-dfl.com/
-- Federated Learning: Communication-Efficient Learning of Deep Networks from Decentralized Data (McMahan et al., 2017)
-- Exponential Moving Average: https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
+**Expected outcome:**
+- 40 physical rounds executed
+- 20 actual aggregations (with communication)
+- 20 pseudo aggregations (no communication)
+- ~50% network traffic reduction
+- Same total epochs as traditional 20-round training
 
 ## Support
 
-For issues or questions:
-- GitHub Issues: https://github.com/CyberDataLab/nebula/issues
-- Documentation: https://docs.nebula-dfl.com/
+- **GitHub Issues:** https://github.com/CyberDataLab/nebula/issues
+- **Documentation:** https://docs.nebula-dfl.com/
 
 ## License
 
-Pseudo Aggregation is part of NEBULA and follows the same AGPLv3 license.
+Part of NEBULA platform under AGPLv3 license.
