@@ -82,9 +82,11 @@ class DFLUpdateHandler(UpdateHandler):
         # Pseudo Aggregation: EMA storage for neighbor models
         self._old_models: dict[str, OrderedDict] = {}  # neighbor_id -> previous model state_dict
         self._old_weight: dict[str, float] = {}
+        self._old_model_rounds: dict[str, int] = {}  # neighbor_id -> round when model was received
         self._ema_deltas: dict[str, OrderedDict] = {}  # neighbor_id -> EMA of deltaW
         self._pseudo_agg_enabled = False
         self._ema_alpha = 0.25  # Default EMA weight for new delta (will be overridden by config)
+        self._max_round_staleness = 5  # Maximum round difference before excluding from pseudo agg
 
     @property
     def us(self):
@@ -182,6 +184,7 @@ class DFLUpdateHandler(UpdateHandler):
 
                 # Update EMA if pseudo aggregation is enabled (for actual aggregation rounds)
                 if self._pseudo_agg_enabled:
+                    self._old_model_rounds[source] = round  # Track round when model was received
                     self.update_ema(source, model)
 
                 self._sources_received.add(source)
@@ -465,24 +468,69 @@ class DFLUpdateHandler(UpdateHandler):
         """
         Get predicted models for all federation nodes for pseudo aggregation.
 
+        Models are filtered based on staleness:
+        - If model is older than max_round_staleness rounds: exclude from aggregation
+        - Otherwise: weight is adjusted by 1 / max(1, current_round - model_round + 1)
+
         Args:
             federation_nodes (set): Set of neighbor node IDs.
 
         Returns:
-            dict: Dictionary mapping neighbor_id to (predicted_model, weight) tuples.
-                 Only includes neighbors with available predictions.
+            dict: Dictionary mapping neighbor_id to (predicted_model, adjusted_weight) tuples.
+                 Only includes neighbors with fresh enough predictions.
         """
         predicted_models = {}
         skipped_neighbors = []
+        stale_neighbors = []
+
+        # Get current round from engine
+        current_round = self._aggregator.engine.round if self._aggregator.engine.round is not None else 0
 
         for neighbor_id in federation_nodes:
             predicted_model = self.predict_neighbor_model(neighbor_id)
-            if predicted_model is not None:
-                predicted_models[neighbor_id] = (predicted_model, self._old_weight[neighbor_id] if neighbor_id in self._old_weight else 100.0)
-            else:
+            if predicted_model is None:
                 skipped_neighbors.append(neighbor_id)
+                continue
 
-        if skipped_neighbors:
+            # Check staleness
+            if neighbor_id not in self._old_model_rounds:
+                # No round info, use default weight
+                base_weight = self._old_weight.get(neighbor_id, 100.0)
+                predicted_models[neighbor_id] = (predicted_model, base_weight)
+                logging.debug(f"Neighbor {neighbor_id}: no round info, using default weight {base_weight}")
+                continue
+
+            model_round = self._old_model_rounds[neighbor_id]
+            round_diff = current_round - model_round
+
+            # Exclude if too stale (older than 5 rounds)
+            if round_diff > self._max_round_staleness:
+                stale_neighbors.append((neighbor_id, round_diff))
+                logging.info(
+                    f"Excluding neighbor {neighbor_id} from pseudo aggregation: "
+                    f"model is {round_diff} rounds old (current={current_round}, model_round={model_round})"
+                )
+                continue
+
+            # Adjust weight based on staleness
+            base_weight = self._old_weight.get(neighbor_id, 100.0)
+            staleness_penalty = max(1, round_diff + 1)
+            adjusted_weight = base_weight / staleness_penalty
+
+            predicted_models[neighbor_id] = (predicted_model, adjusted_weight)
+            logging.info(
+                f"Neighbor {neighbor_id}: model from round {model_round} (diff={round_diff}), "
+                f"weight adjusted: {base_weight:.2f} / {staleness_penalty} = {adjusted_weight:.2f}"
+            )
+
+        # Log summary
+        if stale_neighbors:
+            logging.info(
+                f"Pseudo Aggregation: Predicted {len(predicted_models)} models, "
+                f"excluded {len(stale_neighbors)} stale neighbors: {[(n, d) for n, d in stale_neighbors]}, "
+                f"skipped {len(skipped_neighbors)} without history"
+            )
+        elif skipped_neighbors:
             logging.info(
                 f"Pseudo Aggregation: Predicted {len(predicted_models)} models, "
                 f"skipped {len(skipped_neighbors)} neighbors without history: {skipped_neighbors}"
