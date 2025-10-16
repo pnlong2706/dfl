@@ -478,6 +478,22 @@
                             Higher values (0.4-0.5): Fast adaptation, less stable
                         </small>
                     </div>
+
+                    <h5 class="step-title" style="margin-top: 20px;">Mid-Round Testing (Balance Computation Time)</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 15px;">
+                        <input class="form-check-input" type="checkbox" id="midRoundTestSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                        <label class="form-check-label" for="midRoundTestSwitch" style="margin-left: 10px; font-size: 14px;">
+                            Enable Mid-Round Testing
+                        </label>
+                    </div>
+                    <div id="midRoundTestInfo" style="display: none; margin-left: 23px; margin-top: 10px;">
+                        <small class="form-text text-muted">
+                            <strong>Purpose:</strong> Balances computation time with Pseudo Aggregation by adding extra test rounds.<br>
+                            <strong>Behavior:</strong> Test → Train half epochs → Test (no agg) → Train half epochs → Aggregate<br>
+                            <strong>Note:</strong> Doubles physical rounds but keeps same total epochs. Do not enable with Pseudo Agg.
+                        </small>
+                    </div>
                 </div>
             </div>
             <div id="expert-container" class="col-md-12 " style="display: none">

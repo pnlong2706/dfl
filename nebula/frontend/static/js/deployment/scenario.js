@@ -75,6 +75,7 @@ const ScenarioManager = (function() {
                 enabled: window.PseudoAggManager.isEnabled(),
                 ema_alpha: window.PseudoAggManager.getEmaAlpha()
             },
+            mid_round_test: window.MidRoundTestManager.isEnabled(),
             logginglevel: document.getElementById("loggingLevel").value === "true",
             report_status_data_queue: document.getElementById("reportingSwitch").checked,
             epochs: parseInt(document.getElementById("epochs").value),

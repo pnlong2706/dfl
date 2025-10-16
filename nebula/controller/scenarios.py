@@ -53,6 +53,7 @@ class Scenario:
         model,
         agg_algorithm,
         pseudo_aggregation,
+        mid_round_test,
         rounds,
         logginglevel,
         report_status_data_queue,
@@ -180,6 +181,7 @@ class Scenario:
         self.model = model
         self.agg_algorithm = agg_algorithm
         self.pseudo_aggregation = pseudo_aggregation if pseudo_aggregation else {"enabled": False, "ema_alpha": 0.25}
+        self.mid_round_test = mid_round_test if mid_round_test is not None else False
         self.rounds = rounds
         self.logginglevel = logginglevel
         self.report_status_data_queue = report_status_data_queue
@@ -693,6 +695,7 @@ class ScenarioManagement:
             participant_config["data_args"]["partition_parameter"] = self.scenario.partition_parameter
             participant_config["model_args"]["model"] = self.scenario.model
             participant_config["training_args"]["epochs"] = int(self.scenario.epochs)
+            participant_config["training_args"]["mid_round_test"] = self.scenario.mid_round_test
             participant_config["device_args"]["accelerator"] = self.scenario.accelerator
             participant_config["device_args"]["gpu_id"] = self.scenario.gpu_id
             participant_config["device_args"]["logging"] = self.scenario.logginglevel

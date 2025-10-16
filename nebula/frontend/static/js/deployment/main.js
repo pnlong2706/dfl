@@ -9,6 +9,7 @@ import GraphSettings from './graph-settings.js';
 import Utils from './utils.js';
 import TrustworthinessManager from './trustworthiness.js';
 import PseudoAggManager from './pseudo-agg.js';
+import MidRoundTestManager from './mid-round-test.js';
 
 const DeploymentManager = (function() {
     function initialize() {
@@ -34,6 +35,7 @@ const DeploymentManager = (function() {
         TrustworthinessManager.initializeTrustworthinessSystem();
         GraphSettings.initializeDistanceControls();
         PseudoAggManager.initialize();
+        MidRoundTestManager.initialize();
 
         // Make modules globally available
         window.ScenarioManager = ScenarioManager;
@@ -44,6 +46,7 @@ const DeploymentManager = (function() {
         window.SaManager = SaManager;
         window.TrustworthinessManager = TrustworthinessManager;
         window.GraphSettings = GraphSettings;
+        window.MidRoundTestManager = MidRoundTestManager;
         window.PseudoAggManager = PseudoAggManager;
         window.DeploymentManager = DeploymentManager;
         window.Utils = Utils;
