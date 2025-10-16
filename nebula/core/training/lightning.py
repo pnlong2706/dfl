@@ -75,12 +75,12 @@ class NebulaProgressBar(ProgressBar):
         if self.enable:
             logging_training.info(f"Validation for Epoch {trainer.current_epoch} finished")
 
-    def on_test_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx):
+    def on_test_batch_start(self, trainer, pl_module, batch, batch_idx, dataloader_idx=0):
         super().on_test_batch_start(trainer, pl_module, batch, batch_idx, dataloader_idx)
         if not self.has_dataloader_changed(dataloader_idx):
             return
 
-    def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         """Called at the end of each test batch."""
         super().on_test_batch_end(trainer, pl_module, outputs, batch, batch_idx, dataloader_idx)
         if self.enable:
