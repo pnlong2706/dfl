@@ -421,14 +421,22 @@ class DFLUpdateHandler(UpdateHandler):
         # Store new model as old for next round
         self.store_old_model(neighbor_id, new_model_state_dict)
 
-    def predict_neighbor_model(self, neighbor_id: str) -> Optional[OrderedDict]:
+    def predict_neighbor_model(self, neighbor_id: str, current_round: int = None) -> Optional[OrderedDict]:
         """
-        Predict neighbor's model using oldW + EMA for pseudo aggregation.
+        Predict neighbor's model using oldW + EMA * scaling_factor for pseudo aggregation.
 
-        Prediction formula: predictedW = oldW + EMA
+        Prediction formula:
+            predictedW = oldW + EMA * scaling_factor
+            scaling_factor = max(current_round - model_round + 0.5, 0.5)
+
+        The scaling factor increases with staleness:
+        - Same round (diff=0): 0.5 (conservative)
+        - 1 round old (diff=1): 1.5 (extrapolate further)
+        - 2 rounds old (diff=2): 2.5 (extrapolate even more)
 
         Args:
             neighbor_id (str): Identifier of the neighbor to predict.
+            current_round (int, optional): Current round number for staleness calculation.
 
         Returns:
             OrderedDict: Predicted model state dict, or None if no history available.
@@ -450,18 +458,29 @@ class DFLUpdateHandler(UpdateHandler):
             logging.debug(f"No EMA for neighbor {neighbor_id}, predicting no change (using old model)")
             return copy.deepcopy(old_model)
 
-        # Predict: oldW + EMA
+        # Calculate scaling factor based on staleness
+        scaling_factor = 0.5  # Default if no round info
+        if current_round is not None and neighbor_id in self._old_model_rounds:
+            model_round = self._old_model_rounds[neighbor_id]
+            round_diff = current_round - model_round
+            scaling_factor = max(round_diff + 0.5, 0.5)
+            logging.debug(
+                f"Neighbor {neighbor_id}: model from round {model_round}, current {current_round}, "
+                f"diff={round_diff}, scaling_factor={scaling_factor}"
+            )
+
+        # Predict: oldW + EMA * scaling_factor
         ema = self._ema_deltas[neighbor_id]
         predicted = OrderedDict()
 
         for key in old_model.keys():
             if key in ema:
-                predicted[key] = old_model[key] + ema[key] * 0.5
+                predicted[key] = old_model[key] + ema[key] * scaling_factor
             else:
                 # Parameter exists in old model but not in EMA, keep old value
                 predicted[key] = old_model[key]
 
-        logging.debug(f"Predicted model for neighbor {neighbor_id}")
+        logging.debug(f"Predicted model for neighbor {neighbor_id} with scaling factor {scaling_factor:.2f}")
         return predicted
 
     async def get_predicted_models(self, federation_nodes: set) -> dict:
@@ -487,7 +506,7 @@ class DFLUpdateHandler(UpdateHandler):
         current_round = self._aggregator.engine.round if self._aggregator.engine.round is not None else 0
 
         for neighbor_id in federation_nodes:
-            predicted_model = self.predict_neighbor_model(neighbor_id)
+            predicted_model = self.predict_neighbor_model(neighbor_id, current_round)
             if predicted_model is None:
                 skipped_neighbors.append(neighbor_id)
                 continue
