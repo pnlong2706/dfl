@@ -1,6 +1,7 @@
 import copy
 import logging
 import time
+import sys
 from collections import OrderedDict, deque
 from typing import TYPE_CHECKING, Optional
 
@@ -12,11 +13,17 @@ from nebula.core.utils.locker import Locker
 if TYPE_CHECKING:
     from nebula.core.aggregation.aggregator import Aggregator
 
+logging.basicConfig(
+    level=logging.INFO,  # or DEBUG if you want more detail
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+
 
 class Update:
     """
     Represents a model update received from a node in a specific training round.
-    
+
     Attributes:
         model (object): The model object or weights received.
         weight (float): The weight or importance of the update.
@@ -48,7 +55,7 @@ class DFLUpdateHandler(UpdateHandler):
     This handler manages the reception, storage, and tracking of model updates from federation nodes
     during asynchronous rounds. It supports partial updates, late arrivals, and maintains update history.
     """
-    
+
     def __init__(self, aggregator, addr, buffersize=MAX_UPDATE_BUFFER_SIZE):
         """
         Initialize the update handler with required locks and storage.
@@ -74,6 +81,7 @@ class DFLUpdateHandler(UpdateHandler):
 
         # Pseudo Aggregation: EMA storage for neighbor models
         self._old_models: dict[str, OrderedDict] = {}  # neighbor_id -> previous model state_dict
+        self._old_weight: dict[str, float] = {}
         self._ema_deltas: dict[str, OrderedDict] = {}  # neighbor_id -> EMA of deltaW
         self._pseudo_agg_enabled = False
         self._ema_alpha = 0.25  # Default EMA weight for new delta (will be overridden by config)
@@ -167,6 +175,7 @@ class DFLUpdateHandler(UpdateHandler):
                 last_update_used = self.us[source][0]
                 self.us[source][1].append(updt)
                 self.us[source] = (last_update_used, self.us[source][1])
+                self._old_weight[source] = weight
                 logging.info(
                     f"Storage Update | source={source} | round={round} | weight={weight} | federation nodes: {self._sources_expected}"
                 )
@@ -444,7 +453,7 @@ class DFLUpdateHandler(UpdateHandler):
 
         for key in old_model.keys():
             if key in ema:
-                predicted[key] = old_model[key] + ema[key]
+                predicted[key] = old_model[key] + ema[key] * 0.5
             else:
                 # Parameter exists in old model but not in EMA, keep old value
                 predicted[key] = old_model[key]
@@ -469,8 +478,7 @@ class DFLUpdateHandler(UpdateHandler):
         for neighbor_id in federation_nodes:
             predicted_model = self.predict_neighbor_model(neighbor_id)
             if predicted_model is not None:
-                # Use weight=1 for predicted models (can be adjusted later)
-                predicted_models[neighbor_id] = (predicted_model, 1.0)
+                predicted_models[neighbor_id] = (predicted_model, self._old_weight[neighbor_id] if neighbor_id in self._old_weight else 100.0)
             else:
                 skipped_neighbors.append(neighbor_id)
 
