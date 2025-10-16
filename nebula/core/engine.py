@@ -114,6 +114,11 @@ class Engine:
         self._pseudo_agg_ema_alpha = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("ema_alpha", 0.25)
         self._is_pseudo_round = False  # Track whether current round is pseudo or actual
 
+        # Mid-round testing configuration (for balancing computation with pseudo agg)
+        self._mid_round_test_enabled = config.participant.get("training_args", {}).get("mid_round_test", False)
+        self._is_mid_test_round = False  # Track if this is a mid-round test (no agg, no comm)
+        logging.info(f"Mid-round testing enabled = {self._mid_round_test_enabled}")
+
         self.security = security
 
         self._trainer = trainer(model, datamodule, config=self.config)
@@ -255,6 +260,14 @@ class Engine:
     def is_pseudo_round(self):
         """Check if current round is a pseudo aggregation round."""
         return self._is_pseudo_round
+
+    def is_mid_round_test_enabled(self):
+        """Check if mid-round testing is enabled in configuration."""
+        return self._mid_round_test_enabled
+
+    def is_mid_test_round(self):
+        """Check if current round is a mid-round test (no aggregation, no communication)."""
+        return self._is_mid_test_round
 
     def get_round_with_phase(self):
         """
@@ -743,6 +756,12 @@ class Engine:
                     self.total_rounds = self.total_rounds * 2
                     logging.info(f"Pseudo Aggregation enabled: Doubling rounds from {self.config.participant['scenario_args']['rounds']} to {self.total_rounds}")
 
+                # If mid-round testing is enabled (and pseudo agg is NOT), also double rounds
+                # Each "logical round" becomes 2 physical rounds (train+test+agg, train+test no-agg)
+                elif self._mid_round_test_enabled:
+                    self.total_rounds = self.total_rounds * 2
+                    logging.info(f"Mid-round testing enabled: Doubling rounds from {self.config.participant['scenario_args']['rounds']} to {self.total_rounds}")
+
                 epochs = self.config.participant["training_args"]["epochs"]
                 await self.get_round_lock().acquire_async()
                 self.round = 0
@@ -915,8 +934,25 @@ class Engine:
                         indent=2,
                         title="Round information",
                     )
+                # Determine if this is a mid-round test (for balancing computation)
+                elif self._mid_round_test_enabled:
+                    # Round 0 and 1: normal (with aggregation)
+                    if self.round <= 1:
+                        self._is_mid_test_round = False
+                    else:
+                        # Round 2+: even rounds are mid-test (no agg), odd rounds are normal (with agg)
+                        self._is_mid_test_round = (self.round % 2 == 0)
+
+                    round_type = "Mid-Test (No Agg)" if self._is_mid_test_round else "Normal (With Agg)"
+                    max_logical_rounds = self.total_rounds // 2
+                    print_msg_box(
+                        msg=f"Round {self.round} ({round_type}) | Physical: {self.round}/{self.total_rounds - 1} | Logical: {self.round // 2}/{max_logical_rounds}",
+                        indent=2,
+                        title="Round information",
+                    )
                 else:
                     self._is_pseudo_round = False
+                    self._is_mid_test_round = False
                     print_msg_box(
                         msg=f"Round {self.round} of {self.total_rounds - 1} started (max. {self.total_rounds} rounds)",
                         indent=2,
