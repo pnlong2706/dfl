@@ -2210,6 +2210,19 @@ async def run_scenario(scenario_data: dict, role: str, user: str) -> None:
     """
     user_data = user_data_store[user]
 
+    # Check if accelerator is CPU - prevent running without GPU
+    if scenario_data.get("accelerator") == "cpu":
+        logging.error(
+            f"[{scenario_data.get('scenario_title', 'Unnamed')}] "
+            f"Scenario rejected: accelerator is set to 'cpu'. GPU is required to run scenarios."
+        )
+        # Mark scenario as failed/finished
+        user_data.scenarios_finished += 1
+        if user_data.scenarios_finished >= user_data.scenarios_list_length:
+            user_data.scenarios_list_length = 0
+            user_data.scenarios_list.clear()
+        return  # Stop immediately, don't create any nodes
+
     # PHYSICAL  ➜ wait until all nodes are idle
     is_physical = scenario_data.get("deployment") == "physical"
     phys_ips = scenario_data.get("physical_ips", [])
