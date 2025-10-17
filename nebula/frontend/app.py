@@ -2161,6 +2161,9 @@ async def assign_available_gpu(scenario_data, role):
     # Obtain available system_gpus
     available_system_gpus = response.get("available_gpus", None) if response is not None else None
 
+    logging.info(response.get("available_gpus", None))
+    logging.info("AHAHUIHIAUHFAJSHF")
+
     if available_system_gpus:
         running_scenarios = await get_running_scenarios(get_all=True)
         # Obtain currently used gpus
@@ -2210,19 +2213,6 @@ async def run_scenario(scenario_data: dict, role: str, user: str) -> None:
     """
     user_data = user_data_store[user]
 
-    # Check if accelerator is CPU - prevent running without GPU
-    if scenario_data.get("accelerator") == "cpu":
-        logging.error(
-            f"[{scenario_data.get('scenario_title', 'Unnamed')}] "
-            f"Scenario rejected: accelerator is set to 'cpu'. GPU is required to run scenarios."
-        )
-        # Mark scenario as failed/finished
-        user_data.scenarios_finished += 1
-        if user_data.scenarios_finished >= user_data.scenarios_list_length:
-            user_data.scenarios_list_length = 0
-            user_data.scenarios_list.clear()
-        return  # Stop immediately, don't create any nodes
-
     # PHYSICAL  ➜ wait until all nodes are idle
     is_physical = scenario_data.get("deployment") == "physical"
     phys_ips = scenario_data.get("physical_ips", [])
@@ -2240,6 +2230,19 @@ async def run_scenario(scenario_data: dict, role: str, user: str) -> None:
 
     # Reserve CPU/GPU based on availability and role
     scenario_data = await assign_available_gpu(scenario_data, role)
+
+        # Check if accelerator is CPU - prevent running without GPU
+    if scenario_data.get("accelerator") == "cpu":
+        logging.error(
+            f"[{scenario_data.get('scenario_title', 'Unnamed')}] "
+            f"Scenario rejected: accelerator is set to 'cpu'. GPU is required to run scenarios."
+        )
+        # Mark scenario as failed/finished
+        user_data.scenarios_finished += 1
+        if user_data.scenarios_finished >= user_data.scenarios_list_length:
+            user_data.scenarios_list_length = 0
+            user_data.scenarios_list.clear()
+        return  # Stop immediately, don't create any nodes
 
     # Launch on the controller
     scenario_name = await deploy_scenario(scenario_data, role, user)
