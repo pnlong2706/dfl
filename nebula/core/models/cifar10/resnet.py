@@ -63,7 +63,7 @@ class CIFAR10ModelResNet(NebulaModel):
         implementation="scratch",
         classifier="resnet9",
     ):
-        super().__init__()
+        # Create metrics before calling super().__init__()
         if metrics is None:
             metrics = MetricCollection([
                 MulticlassAccuracy(num_classes=num_classes),
@@ -71,15 +71,19 @@ class CIFAR10ModelResNet(NebulaModel):
                 MulticlassRecall(num_classes=num_classes),
                 MulticlassF1Score(num_classes=num_classes),
             ])
-        self.train_metrics = metrics.clone(prefix="Train/")
-        self.val_metrics = metrics.clone(prefix="Validation/")
-        self.test_metrics = metrics.clone(prefix="Test/")
 
         if confusion_matrix is None:
-            self.cm = MulticlassConfusionMatrix(num_classes=num_classes)
-        if seed is not None:
-            torch.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
+            confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+
+        # Pass all parameters to parent class
+        super().__init__(
+            input_channels=input_channels,
+            num_classes=num_classes,
+            learning_rate=learning_rate,
+            metrics=metrics,
+            confusion_matrix=confusion_matrix,
+            seed=seed
+        )
 
         self.implementation = implementation
         self.classifier = classifier
