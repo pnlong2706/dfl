@@ -196,6 +196,9 @@ class NebulaModel(pl.LightningModule, ABC):
         if confusion_matrix is None:
             self.cm = MulticlassConfusionMatrix(num_classes=num_classes)
             self.cm_global = MulticlassConfusionMatrix(num_classes=num_classes)
+        else:
+            self.cm = confusion_matrix
+            self.cm_global = MulticlassConfusionMatrix(num_classes=num_classes)
         if seed is not None:
             torch.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
