@@ -391,7 +391,15 @@ class DFLUpdateHandler(UpdateHandler):
         old_model = self._old_models[neighbor_id]
         delta = OrderedDict()
 
+        # Skip BatchNorm running statistics - these are data-dependent, not gradient-dependent
+        # Predicting them via EMA produces invalid statistics that corrupt model predictions
+        skip_keys = {'running_mean', 'running_var', 'num_batches_tracked'}
+
         for key in new_model_state_dict.keys():
+            # Skip buffers that shouldn't be predicted (e.g., BatchNorm running stats)
+            if any(skip_key in key for skip_key in skip_keys):
+                continue
+
             if key in old_model:
                 delta[key] = new_model_state_dict[key] - old_model[key]
             else:
@@ -470,11 +478,18 @@ class DFLUpdateHandler(UpdateHandler):
             )
 
         # Predict: oldW + EMA * scaling_factor
+        # Skip BatchNorm buffers - use stored values instead of predicting
+        skip_keys = {'running_mean', 'running_var', 'num_batches_tracked'}
+
         ema = self._ema_deltas[neighbor_id]
         predicted = OrderedDict()
 
         for key in old_model.keys():
-            if key in ema:
+            # For BatchNorm buffers, use the stored value (don't predict)
+            if any(skip_key in key for skip_key in skip_keys):
+                predicted[key] = old_model[key]
+            elif key in ema:
+                # For parameters, predict using EMA
                 predicted[key] = old_model[key] + ema[key] * scaling_factor
             else:
                 # Parameter exists in old model but not in EMA, keep old value
