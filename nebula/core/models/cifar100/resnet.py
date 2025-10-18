@@ -1,20 +1,8 @@
-import matplotlib
-import matplotlib.pyplot as plt
+import torch
 from torch import nn
-from torchmetrics import MetricCollection
+from torchvision.models import resnet18, resnet34, resnet50
 
 from nebula.core.models.nebulamodel import NebulaModel
-
-matplotlib.use("Agg")
-plt.switch_backend("Agg")
-import torch
-from torchmetrics.classification import (
-    MulticlassAccuracy,
-    MulticlassF1Score,
-    MulticlassPrecision,
-    MulticlassRecall,
-)
-from torchvision.models import resnet18, resnet34, resnet50
 
 IMAGE_SIZE = 32
 
@@ -63,25 +51,13 @@ class CIFAR100ModelResNet(NebulaModel):
         implementation="scratch",
         classifier="resnet18",
     ):
-        # Create metrics before calling super().__init__()
-        if metrics is None:
-            metrics = MetricCollection([
-                MulticlassAccuracy(num_classes=num_classes),
-                MulticlassPrecision(num_classes=num_classes),
-                MulticlassRecall(num_classes=num_classes),
-                MulticlassF1Score(num_classes=num_classes),
-            ])
-
-        # Don't create confusion_matrix here - let parent handle it
-        # Parent will create both cm and cm_global when confusion_matrix=None
-
-        # Pass all parameters to parent class
+        # Let parent handle all metrics and confusion matrix creation
         super().__init__(
             input_channels=input_channels,
             num_classes=num_classes,
             learning_rate=learning_rate,
             metrics=metrics,
-            confusion_matrix=confusion_matrix,  # Pass as-is (usually None)
+            confusion_matrix=confusion_matrix,
             seed=seed
         )
 
