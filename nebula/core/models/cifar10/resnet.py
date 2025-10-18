@@ -10,7 +10,6 @@ plt.switch_backend("Agg")
 import torch
 from torchmetrics.classification import (
     MulticlassAccuracy,
-    MulticlassConfusionMatrix,
     MulticlassF1Score,
     MulticlassPrecision,
     MulticlassRecall,
@@ -72,8 +71,8 @@ class CIFAR10ModelResNet(NebulaModel):
                 MulticlassF1Score(num_classes=num_classes),
             ])
 
-        if confusion_matrix is None:
-            confusion_matrix = MulticlassConfusionMatrix(num_classes=num_classes)
+        # Don't create confusion_matrix here - let parent handle it
+        # Parent will create both cm and cm_global when confusion_matrix=None
 
         # Pass all parameters to parent class
         super().__init__(
@@ -81,7 +80,7 @@ class CIFAR10ModelResNet(NebulaModel):
             num_classes=num_classes,
             learning_rate=learning_rate,
             metrics=metrics,
-            confusion_matrix=confusion_matrix,
+            confusion_matrix=confusion_matrix,  # Pass as-is (usually None)
             seed=seed
         )
 
