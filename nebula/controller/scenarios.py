@@ -1204,7 +1204,7 @@ class ScenarioManagement:
                     "NVIDIA_DISABLE_REQUIRE": True,
                     "NEBULA_LOGS_DIR": "/nebula/app/logs/",
                     "NEBULA_CONFIG_DIR": "/nebula/app/config/",
-                    "CUDA_VISIBLE_DEVICES": "5,6,7",
+                    "CUDA_VISIBLE_DEVICES": "6,7",
                 }
                 host_config = client.api.create_host_config(
                     binds=[f"{self.root_path}:/nebula", "/var/run/docker.sock:/var/run/docker.sock"],
