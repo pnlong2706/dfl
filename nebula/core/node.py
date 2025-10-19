@@ -170,6 +170,11 @@ async def main(config: Config):
     else:
         raise ValueError(f"Dataset {dataset_name} not supported")
 
+    # Log model parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logging.info(f"Model {model_name} for {dataset_name}: Total params={total_params:,}, Trainable={trainable_params:,}")
+
     dataset = NebulaPartition(handler=handler, config=config)
     dataset.load_partition()
     dataset.log_partition()
