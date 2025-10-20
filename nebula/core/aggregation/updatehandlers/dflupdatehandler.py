@@ -88,6 +88,11 @@ class DFLUpdateHandler(UpdateHandler):
         self._ema_alpha = 0.25  # Default EMA weight for new delta (will be overridden by config)
         self._max_round_staleness = 5  # Maximum round difference before excluding from pseudo agg
 
+        # Step scheduler for adjusted weight decay
+        self._weight_drop_rate = 1.0  # Multiplicative factor (< 1 to decay weight over time)
+        self._weight_schedule_step = 1  # Number of physical rounds before applying drop_rate
+        self._stop_pseudo_round = None  # Physical round after which to stop pseudo aggregation (None = no limit)
+
     @property
     def us(self):
         """Returns the internal updates storage dictionary."""
@@ -335,17 +340,36 @@ class DFLUpdateHandler(UpdateHandler):
 
     # ========== Pseudo Aggregation Methods ==========
 
-    def enable_pseudo_aggregation(self, ema_alpha: float = 0.25):
+    def enable_pseudo_aggregation(
+        self,
+        ema_alpha: float = 0.25,
+        weight_drop_rate: float = 1.0,
+        weight_schedule_step: int = 1,
+        stop_pseudo_round: int = None
+    ):
         """
-        Enable pseudo aggregation with specified EMA alpha.
+        Enable pseudo aggregation with EMA-based model prediction and weight scheduling.
 
         Args:
             ema_alpha (float): Weight for new delta in EMA calculation (default: 0.25).
                              EMA_new = (1 - ema_alpha) * EMA_old + ema_alpha * delta
+            weight_drop_rate (float): Multiplicative decay factor for adjusted_weight (default: 1.0 = no decay).
+                                    Applied every weight_schedule_step physical rounds.
+                                    Formula: adjusted_weight *= drop_rate ^ (physical_round // schedule_step)
+            weight_schedule_step (int): Number of physical rounds between weight decay applications (default: 1).
+            stop_pseudo_round (int): Physical round after which pseudo aggregation stops (default: None = no limit).
         """
         self._pseudo_agg_enabled = True
         self._ema_alpha = ema_alpha
-        logging.info(f"Pseudo Aggregation enabled with EMA alpha={ema_alpha}")
+        self._weight_drop_rate = weight_drop_rate
+        self._weight_schedule_step = max(1, weight_schedule_step)  # Ensure at least 1
+        self._stop_pseudo_round = stop_pseudo_round
+        logging.info(
+            f"Pseudo Aggregation enabled: ema_alpha={ema_alpha}, "
+            f"weight_drop_rate={weight_drop_rate}, "
+            f"weight_schedule_step={weight_schedule_step}, "
+            f"stop_pseudo_round={stop_pseudo_round}"
+        )
 
     def disable_pseudo_aggregation(self):
         """Disable pseudo aggregation and clear EMA storage."""
@@ -504,7 +528,11 @@ class DFLUpdateHandler(UpdateHandler):
 
         Models are filtered based on staleness:
         - If model is older than max_round_staleness rounds: exclude from aggregation
-        - Otherwise: weight is adjusted by 1 / max(1, current_round - model_round + 1)
+        - Otherwise: weight is adjusted by staleness and optional step scheduler
+
+        Step Scheduler:
+        - adjusted_weight *= drop_rate ^ (physical_round // schedule_step)
+        - Allows gradual weight decay over training
 
         Args:
             federation_nodes (set): Set of neighbor node IDs.
@@ -512,13 +540,24 @@ class DFLUpdateHandler(UpdateHandler):
         Returns:
             dict: Dictionary mapping neighbor_id to (predicted_model, adjusted_weight) tuples.
                  Only includes neighbors with fresh enough predictions.
+                 Returns empty dict if past stop_pseudo_round.
         """
         predicted_models = {}
         skipped_neighbors = []
         stale_neighbors = []
 
-        # Get current round from engine
+        # Get current round from engine (logical round)
         current_round = self._aggregator.engine.round if self._aggregator.engine.round is not None else 0
+
+        # Calculate physical round (pseudo aggregation doubles rounds, so physical = logical // 2)
+        physical_round = (current_round + 1) // 2
+
+        # Check if we should stop pseudo aggregation
+        if self._stop_pseudo_round is not None and physical_round > self._stop_pseudo_round:
+            logging.info(
+                f"Pseudo Aggregation stopped: physical_round={physical_round} > stop_pseudo_round={self._stop_pseudo_round}"
+            )
+            return {}
 
         for neighbor_id in federation_nodes:
             predicted_model = self.predict_neighbor_model(neighbor_id, current_round)
@@ -551,11 +590,22 @@ class DFLUpdateHandler(UpdateHandler):
             staleness_penalty = max(1, round_diff + 1)
             adjusted_weight = base_weight / staleness_penalty
 
+            # Apply step scheduler: adjusted_weight *= drop_rate ^ (physical_round // schedule_step)
+            if self._weight_drop_rate != 1.0:
+                schedule_steps = physical_round // self._weight_schedule_step
+                weight_decay_factor = self._weight_drop_rate ** schedule_steps
+                adjusted_weight *= weight_decay_factor
+                logging.info(
+                    f"Neighbor {neighbor_id}: model from round {model_round} (diff={round_diff}), "
+                    f"weight: {base_weight:.2f} / {staleness_penalty} * {self._weight_drop_rate}^{schedule_steps} = {adjusted_weight:.2f}"
+                )
+            else:
+                logging.info(
+                    f"Neighbor {neighbor_id}: model from round {model_round} (diff={round_diff}), "
+                    f"weight adjusted: {base_weight:.2f} / {staleness_penalty} = {adjusted_weight:.2f}"
+                )
+
             predicted_models[neighbor_id] = (predicted_model, adjusted_weight)
-            logging.info(
-                f"Neighbor {neighbor_id}: model from round {model_round} (diff={round_diff}), "
-                f"weight adjusted: {base_weight:.2f} / {staleness_penalty} = {adjusted_weight:.2f}"
-            )
 
         # Log summary
         if stale_neighbors:

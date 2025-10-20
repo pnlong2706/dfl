@@ -112,6 +112,9 @@ class Engine:
         # Pseudo Aggregation configuration
         self._pseudo_agg_enabled = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("enabled", False)
         self._pseudo_agg_ema_alpha = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("ema_alpha", 0.25)
+        self._pseudo_agg_weight_drop_rate = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("weight_drop_rate", 1.0)
+        self._pseudo_agg_weight_schedule_step = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("weight_schedule_step", 1)
+        self._pseudo_agg_stop_pseudo_round = config.participant.get("aggregator_args", {}).get("pseudo_aggregation", {}).get("stop_pseudo_round", None)
         self._is_pseudo_round = False  # Track whether current round is pseudo or actual
 
         # Mid-round testing configuration (for balancing computation with pseudo agg)
@@ -676,8 +679,18 @@ class Engine:
 
         # Enable pseudo aggregation in update handler if configured
         if self._pseudo_agg_enabled:
-            logging.info(f"Enabling Pseudo Aggregation with EMA alpha={self._pseudo_agg_ema_alpha}")
-            self.aggregator.us.enable_pseudo_aggregation(ema_alpha=self._pseudo_agg_ema_alpha)
+            logging.info(
+                f"Enabling Pseudo Aggregation: ema_alpha={self._pseudo_agg_ema_alpha}, "
+                f"weight_drop_rate={self._pseudo_agg_weight_drop_rate}, "
+                f"weight_schedule_step={self._pseudo_agg_weight_schedule_step}, "
+                f"stop_pseudo_round={self._pseudo_agg_stop_pseudo_round}"
+            )
+            self.aggregator.us.enable_pseudo_aggregation(
+                ema_alpha=self._pseudo_agg_ema_alpha,
+                weight_drop_rate=self._pseudo_agg_weight_drop_rate,
+                weight_schedule_step=self._pseudo_agg_weight_schedule_step,
+                stop_pseudo_round=self._pseudo_agg_stop_pseudo_round
+            )
 
         if "situational_awareness" in self.config.participant:
             await self.sa.init()

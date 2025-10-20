@@ -2,7 +2,10 @@
 const PseudoAggManager = (function() {
     const Settings = {
         enabled: false,
-        emaAlpha: 0.25
+        emaAlpha: 0.25,
+        weightDropRate: 1.0,
+        weightScheduleStep: 1,
+        stopPseudoRound: null
     };
 
     function initialize() {
@@ -10,6 +13,9 @@ const PseudoAggManager = (function() {
         const pseudoAggSettings = document.getElementById('pseudoAggSettings');
         const emaAlphaInput = document.getElementById('emaAlphaInput');
         const emaAlphaValue = document.getElementById('emaAlphaValue');
+        const weightDropRate = document.getElementById('weightDropRate');
+        const weightScheduleStep = document.getElementById('weightScheduleStep');
+        const stopPseudoRound = document.getElementById('stopPseudoRound');
 
         if (!pseudoAggSwitch || !pseudoAggSettings || !emaAlphaInput || !emaAlphaValue) {
             console.warn('Pseudo Aggregation controls not found in DOM');
@@ -41,13 +47,40 @@ const PseudoAggManager = (function() {
             }
         });
 
+        // Weight drop rate listener
+        if (weightDropRate) {
+            weightDropRate.addEventListener('input', function() {
+                Settings.weightDropRate = parseFloat(weightDropRate.value);
+                console.log('Weight Drop Rate updated:', Settings.weightDropRate);
+            });
+        }
+
+        // Weight schedule step listener
+        if (weightScheduleStep) {
+            weightScheduleStep.addEventListener('input', function() {
+                Settings.weightScheduleStep = parseInt(weightScheduleStep.value) || 1;
+                console.log('Weight Schedule Step updated:', Settings.weightScheduleStep);
+            });
+        }
+
+        // Stop pseudo round listener
+        if (stopPseudoRound) {
+            stopPseudoRound.addEventListener('input', function() {
+                Settings.stopPseudoRound = stopPseudoRound.value ? parseInt(stopPseudoRound.value) : null;
+                console.log('Stop Pseudo Round updated:', Settings.stopPseudoRound);
+            });
+        }
+
         console.log('Pseudo Aggregation controls initialized');
     }
 
     function getSettings() {
         return {
             enabled: Settings.enabled,
-            ema_alpha: Settings.emaAlpha
+            ema_alpha: Settings.emaAlpha,
+            weight_drop_rate: Settings.weightDropRate,
+            weight_schedule_step: Settings.weightScheduleStep,
+            stop_pseudo_round: Settings.stopPseudoRound
         };
     }
 

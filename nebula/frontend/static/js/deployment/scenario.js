@@ -71,10 +71,7 @@ const ScenarioManager = (function() {
             partition_parameter: parseFloat(document.getElementById("partitionParameter").value),
             model: document.getElementById("modelSelect").value,
             agg_algorithm: document.getElementById("aggregationSelect").value,
-            pseudo_aggregation: {
-                enabled: window.PseudoAggManager.isEnabled(),
-                ema_alpha: window.PseudoAggManager.getEmaAlpha()
-            },
+            pseudo_aggregation: window.PseudoAggManager.getSettings(),
             mid_round_test: window.MidRoundTestManager.isEnabled(),
             logginglevel: document.getElementById("loggingLevel").value === "true",
             report_status_data_queue: document.getElementById("reportingSwitch").checked,

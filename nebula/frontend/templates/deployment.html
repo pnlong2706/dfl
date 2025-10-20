@@ -477,6 +477,27 @@
                             Lower values (0.1-0.2): Stable predictions, slower adaptation<br>
                             Higher values (0.4-0.5): Fast adaptation, less stable
                         </small>
+
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 15px;">Weight Drop Rate (0.0 - 1.0)</h5>
+                        <input type="number" class="form-control" id="weightDropRate" min="0" max="1" step="0.01" value="1.0"
+                            style="display:inline; width: 30%">
+                        <small class="form-text text-muted" style="display: block; margin-top: 5px;">
+                            Decay factor for predicted model weights (1.0 = no decay, 0.9 = 10% decay per step)
+                        </small>
+
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 15px;">Weight Schedule Step (Physical Rounds)</h5>
+                        <input type="number" class="form-control" id="weightScheduleStep" min="1" step="1" value="1"
+                            style="display:inline; width: 30%">
+                        <small class="form-text text-muted" style="display: block; margin-top: 5px;">
+                            Number of physical rounds between weight decay applications
+                        </small>
+
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 15px;">Stop Pseudo After (Physical Rounds)</h5>
+                        <input type="number" class="form-control" id="stopPseudoRound" min="0" step="1" value="" placeholder="Never stop (leave empty)"
+                            style="display:inline; width: 30%">
+                        <small class="form-text text-muted" style="display: block; margin-top: 5px;">
+                            Stop pseudo aggregation after this many physical rounds (empty = never stop)
+                        </small>
                     </div>
 
                     <h5 class="step-title" style="margin-top: 20px;">Mid-Round Testing (Balance Computation Time)</h5>
