@@ -320,15 +320,15 @@ class NebulaModel(pl.LightningModule, ABC):
             self._perturb_weights(self.fedsam_rho / grad_norm)
 
             # Step 5: Forward pass at perturbed weights (SAME batch X)
-            # Disable BatchNorm statistics updates for second forward pass
+            # Disable BatchNorm statistics updates for second forward-backward pass
             self._disable_batchnorm_tracking()
             y_pred_tilde = self.forward(x)
             loss_tilde = self.criterion(y_pred_tilde, y)
-            self._enable_batchnorm_tracking()
 
             # Step 6: Compute gradient g_tilde at w_tilde
             opt.zero_grad()
             self.manual_backward(loss_tilde)
+            self._enable_batchnorm_tracking()
 
             # Step 7: Restore original weights and apply g_tilde
             # w_new = w - lr * g_tilde (update from original w, not w_tilde)
