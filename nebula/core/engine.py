@@ -122,6 +122,11 @@ class Engine:
         self._is_mid_test_round = False  # Track if this is a mid-round test (no agg, no comm)
         logging.info(f"Mid-round testing enabled = {self._mid_round_test_enabled}")
 
+        # FedSAM (Sharpness-Aware Minimization) configuration
+        self._fedsam_enabled = config.participant.get("training_args", {}).get("fedsam", {}).get("enabled", False)
+        self._fedsam_rho = config.participant.get("training_args", {}).get("fedsam", {}).get("rho", 0.5)
+        logging.info(f"FedSAM enabled = {self._fedsam_enabled}, rho = {self._fedsam_rho}")
+
         self.security = security
 
         self._trainer = trainer(model, datamodule, config=self.config)

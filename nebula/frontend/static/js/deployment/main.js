@@ -9,6 +9,7 @@ import GraphSettings from './graph-settings.js';
 import Utils from './utils.js';
 import TrustworthinessManager from './trustworthiness.js';
 import PseudoAggManager from './pseudo-agg.js';
+import FedSAMManager from './fedsam-manager.js';
 import MidRoundTestManager from './mid-round-test.js';
 
 const DeploymentManager = (function() {
@@ -35,6 +36,7 @@ const DeploymentManager = (function() {
         TrustworthinessManager.initializeTrustworthinessSystem();
         GraphSettings.initializeDistanceControls();
         PseudoAggManager.initialize();
+        FedSAMManager.initialize();
         MidRoundTestManager.initialize();
 
         // Make modules globally available
@@ -48,6 +50,7 @@ const DeploymentManager = (function() {
         window.GraphSettings = GraphSettings;
         window.MidRoundTestManager = MidRoundTestManager;
         window.PseudoAggManager = PseudoAggManager;
+        window.FedSAMManager = FedSAMManager;
         window.DeploymentManager = DeploymentManager;
         window.Utils = Utils;
     }

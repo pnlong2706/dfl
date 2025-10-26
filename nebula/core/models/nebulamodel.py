@@ -221,6 +221,20 @@ class NebulaModel(pl.LightningModule, ABC):
         self._current_loss = -1
         self._optimizer = None
 
+        # FedSAM configuration
+        self.fedsam_enabled = False
+        self.fedsam_rho = 0.5
+        self._original_weights = {}  # For storing weights before perturbation
+
+    def set_fedsam_config(self, enabled, rho):
+        """Configure FedSAM training."""
+        self.fedsam_enabled = enabled
+        self.fedsam_rho = rho
+        if enabled:
+            # Switch to manual optimization for FedSAM
+            self.automatic_optimization = False
+            logging_training.info(f"FedSAM enabled: rho={rho}, switched to manual optimization")
+
     def set_communication_manager(self, communication_manager):
         self.communication_manager = communication_manager
 
@@ -274,13 +288,94 @@ class NebulaModel(pl.LightningModule, ABC):
     def training_step(self, batch, batch_idx):
         """
         Training step for the model.
+        Supports both standard training and FedSAM (Sharpness-Aware Minimization).
+
         Args:
-            batch:
-            batch_id:
+            batch: (x, y) tuple
+            batch_idx: Batch index
 
         Returns:
+            loss: Training loss
         """
-        return self.step(batch, batch_idx=batch_idx, phase="Train")
+        if not self.fedsam_enabled:
+            # Standard training (automatic optimization)
+            return self.step(batch, batch_idx=batch_idx, phase="Train")
+        else:
+            # FedSAM training (manual optimization)
+            x, y = batch
+            opt = self.optimizers()
+
+            # Step 1: Forward pass at original weights w
+            y_pred = self.forward(x)
+            loss = self.criterion(y_pred, y)
+
+            # Step 2: Compute gradient g at w
+            opt.zero_grad()
+            self.manual_backward(loss)
+
+            # Step 3: Calculate ||g||_2 (L2 norm of all gradients)
+            grad_norm = self._compute_gradient_norm()
+
+            # Step 4: Perturb weights w_tilde = w + rho * g / ||g||
+            self._perturb_weights(self.fedsam_rho / grad_norm)
+
+            # Step 5: Forward pass at perturbed weights (SAME batch X)
+            y_pred_tilde = self.forward(x)
+            loss_tilde = self.criterion(y_pred_tilde, y)
+
+            # Step 6: Compute gradient g_tilde at w_tilde
+            opt.zero_grad()
+            self.manual_backward(loss_tilde)
+
+            # Step 7: Restore original weights and apply g_tilde
+            # w_new = w - lr * g_tilde (update from original w, not w_tilde)
+            self._restore_weights()
+            opt.step()
+
+            # Process metrics with the final prediction
+            self.process_metrics("Train", y_pred_tilde, y, loss_tilde)
+            self._current_loss = loss_tilde
+
+            return loss_tilde
+
+    def _compute_gradient_norm(self):
+        """
+        Compute L2 norm of all gradients (flattened).
+
+        Returns:
+            float: L2 norm of gradients
+        """
+        grad_norm = 0.0
+        for p in self.parameters():
+            if p.grad is not None:
+                grad_norm += p.grad.data.norm(2).item() ** 2
+        return (grad_norm ** 0.5) + 1e-12  # Add epsilon for numerical stability
+
+    def _perturb_weights(self, scale):
+        """
+        Perturb weights: w_tilde = w + scale * g.
+        Store original weights for later restoration.
+
+        Args:
+            scale: Perturbation scale (rho / ||g||)
+        """
+        self._original_weights = {}
+        for name, p in self.named_parameters():
+            if p.grad is not None:
+                # Store original weight
+                self._original_weights[name] = p.data.clone()
+                # Perturb: w_tilde = w + scale * g
+                p.data.add_(p.grad.data, alpha=scale)
+
+    def _restore_weights(self):
+        """
+        Restore original weights before perturbation.
+        This allows optimizer to apply g_tilde to original w.
+        """
+        for name, p in self.named_parameters():
+            if name in self._original_weights:
+                p.data.copy_(self._original_weights[name])
+        self._original_weights = {}
 
     def on_train_start(self):
         logging_training.info(f"{'=' * 10} [Training] Started {'=' * 10}")

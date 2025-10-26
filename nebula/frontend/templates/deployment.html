@@ -500,6 +500,25 @@
                         </small>
                     </div>
 
+                    <h5 class="step-title" style="margin-top: 20px;">FedSAM Training (Sharpness-Aware Minimization)</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 15px;">
+                        <input class="form-check-input" type="checkbox" id="fedsamSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                        <label class="form-check-label" for="fedsamSwitch" style="margin-left: 10px; font-size: 14px;">
+                            Enable FedSAM Training
+                        </label>
+                    </div>
+                    <div id="fedsamSettings" style="display: none; margin-left: 23px; margin-top: 10px;">
+                        <h5 class="step-title" style="font-size: 14px;">Rho (ρ) Parameter</h5>
+                        <input type="number" class="form-control" id="fedsamRho" min="0" max="2" step="0.1" value="0.5"
+                            style="display:inline; width: 30%">
+                        <small class="form-text text-muted" style="display: block; margin-top: 5px;">
+                            <strong>Purpose:</strong> Finds flatter minima for better generalization<br>
+                            <strong>Warning:</strong> Doubles training time (2 forward + 2 backward passes per batch)<br>
+                            <strong>Typical values:</strong> 0.1-1.0 (default: 0.5)
+                        </small>
+                    </div>
+
                     <h5 class="step-title" style="margin-top: 20px;">Mid-Round Testing (Balance Computation Time)</h5>
                     <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 15px;">
                         <input class="form-check-input" type="checkbox" id="midRoundTestSwitch"
