@@ -288,7 +288,7 @@ class NebulaModel(pl.LightningModule, ABC):
     def training_step(self, batch, batch_idx):
         """
         Training step for the model.
-        Supports both standard training and FedSAM (Sharpness-Aware Minimization).
+        Supports both standard training and FedSAM (double training on same batch).
 
         Args:
             batch: (x, y) tuple
@@ -301,45 +301,29 @@ class NebulaModel(pl.LightningModule, ABC):
             # Standard training (automatic optimization)
             return self.step(batch, batch_idx=batch_idx, phase="Train")
         else:
-            # FedSAM training (manual optimization)
+            # FedSAM: Simply train twice on the same mini-batch
             x, y = batch
             opt = self.optimizers()
 
-            # Step 1: Forward pass at original weights w
+            # First training pass
             y_pred = self.forward(x)
             loss = self.criterion(y_pred, y)
-
-            # Step 2: Compute gradient g at w
             opt.zero_grad()
             self.manual_backward(loss)
+            opt.step()
 
-            # Step 3: Calculate ||g||_2 (L2 norm of all gradients)
-            grad_norm = self._compute_gradient_norm()
-
-            # Step 4: Perturb weights w_tilde = w + rho * g / ||g||
-            self._perturb_weights(self.fedsam_rho / grad_norm)
-
-            # Step 5: Forward pass at perturbed weights (SAME batch X)
-            # Disable BatchNorm statistics updates for second forward-backward pass
-            self._disable_batchnorm_tracking()
-            y_pred_tilde = self.forward(x)
-            loss_tilde = self.criterion(y_pred_tilde, y)
-
-            # Step 6: Compute gradient g_tilde at w_tilde
+            # Second training pass on the SAME batch
+            y_pred = self.forward(x)
+            loss = self.criterion(y_pred, y)
             opt.zero_grad()
-            self.manual_backward(loss_tilde)
-            self._enable_batchnorm_tracking()
-
-            # Step 7: Restore original weights and apply g_tilde
-            # w_new = w - lr * g_tilde (update from original w, not w_tilde)
-            self._restore_weights()
+            self.manual_backward(loss)
             opt.step()
 
             # Process metrics with the final prediction
-            self.process_metrics("Train", y_pred_tilde, y, loss_tilde)
-            self._current_loss = loss_tilde
+            self.process_metrics("Train", y_pred, y, loss)
+            self._current_loss = loss
 
-            return loss_tilde
+            return loss
 
     def _compute_gradient_norm(self):
         """
