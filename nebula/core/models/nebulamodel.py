@@ -320,8 +320,11 @@ class NebulaModel(pl.LightningModule, ABC):
             self._perturb_weights(self.fedsam_rho / grad_norm)
 
             # Step 5: Forward pass at perturbed weights (SAME batch X)
+            # Disable BatchNorm statistics updates for second forward pass
+            self._disable_batchnorm_tracking()
             y_pred_tilde = self.forward(x)
             loss_tilde = self.criterion(y_pred_tilde, y)
+            self._enable_batchnorm_tracking()
 
             # Step 6: Compute gradient g_tilde at w_tilde
             opt.zero_grad()
@@ -376,6 +379,24 @@ class NebulaModel(pl.LightningModule, ABC):
             if name in self._original_weights:
                 p.data.copy_(self._original_weights[name])
         self._original_weights = {}
+
+    def _disable_batchnorm_tracking(self):
+        """
+        Disable BatchNorm running statistics tracking.
+        Used during second forward pass in FedSAM to prevent corrupting statistics.
+        """
+        for module in self.modules():
+            if isinstance(module, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d, torch.nn.BatchNorm3d)):
+                module.track_running_stats = False
+
+    def _enable_batchnorm_tracking(self):
+        """
+        Re-enable BatchNorm running statistics tracking.
+        Called after second forward pass in FedSAM.
+        """
+        for module in self.modules():
+            if isinstance(module, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d, torch.nn.BatchNorm3d)):
+                module.track_running_stats = True
 
     def on_train_start(self):
         logging_training.info(f"{'=' * 10} [Training] Started {'=' * 10}")
