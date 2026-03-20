@@ -519,6 +519,30 @@
                         </small>
                     </div>
 
+                    <h5 class="step-title" style="margin-top: 20px;">PCR (Predicted Consensus Regularization)</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 15px;">
+                        <input class="form-check-input" type="checkbox" id="pcrSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                        <label class="form-check-label" for="pcrSwitch" style="margin-left: 10px; font-size: 14px;">
+                            Enable PCR
+                        </label>
+                    </div>
+                    <div id="pcrSettings" style="display: none; margin-left: 23px; margin-top: 10px;">
+                        <h5 class="step-title" style="font-size: 14px;">Regularization Strength (μ)</h5>
+                        <input type="number" class="form-control" id="pcrMu" min="0" max="10" step="0.001" value="0.01"
+                            style="display:inline; width: 30%">
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 15px;">Apply Mode</h5>
+                        <select class="form-control" id="pcrApplyMode" style="display:inline; width: 30%">
+                            <option value="pseudo_only" selected>Pseudo Rounds Only</option>
+                            <option value="all_rounds">All Rounds</option>
+                        </select>
+                        <small class="form-text text-muted" style="display: block; margin-top: 5px;">
+                            <strong>Purpose:</strong> Regularizes local training toward pre-training model to reduce drift under non-IID data<br>
+                            <strong>Loss:</strong> L_total = L_CE + (μ/2) * ||w - w_anchor||²<br>
+                            <strong>Typical μ values:</strong> 0.001-0.1 (default: 0.01)
+                        </small>
+                    </div>
+
                     <h5 class="step-title" style="margin-top: 20px;">Mid-Round Testing (Balance Computation Time)</h5>
                     <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 15px;">
                         <input class="form-check-input" type="checkbox" id="midRoundTestSwitch"

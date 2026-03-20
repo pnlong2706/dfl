@@ -73,6 +73,7 @@ const ScenarioManager = (function() {
             agg_algorithm: document.getElementById("aggregationSelect").value,
             pseudo_aggregation: window.PseudoAggManager.getSettings(),
             fedsam: window.FedSAMManager.getSettings(),
+            pcr: window.PCRManager.getSettings(),
             mid_round_test: window.MidRoundTestManager.isEnabled(),
             logginglevel: document.getElementById("loggingLevel").value === "true",
             report_status_data_queue: document.getElementById("reportingSwitch").checked,
@@ -248,6 +249,9 @@ const ScenarioManager = (function() {
         if (scenario.fedsam) {
             window.FedSAMManager.setSettings(scenario.fedsam);
         }
+        if (scenario.pcr) {
+            window.PCRManager.setSettings(scenario.pcr);
+        }
 
         // Trigger necessary events
         document.getElementById("federationArchitecture").dispatchEvent(new Event('change'));
@@ -351,6 +355,9 @@ const ScenarioManager = (function() {
         }
         if (window.FedSAMManager) {
             window.FedSAMManager.reset();
+        }
+        if (window.PCRManager) {
+            window.PCRManager.reset();
         }
 
         // Trigger necessary events
