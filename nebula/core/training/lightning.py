@@ -152,6 +152,13 @@ class Lightning:
             if hasattr(self.model, 'set_fedsam_config'):
                 self.model.set_fedsam_config(self.fedsam_enabled, self.fedsam_rho)
 
+        # PCR configuration
+        self.pcr_enabled = config.participant.get("training_args", {}).get("pcr", {}).get("enabled", False)
+        self.pcr_mu = config.participant.get("training_args", {}).get("pcr", {}).get("mu", 0.01)
+        self.pcr_apply_mode = config.participant.get("training_args", {}).get("pcr", {}).get("apply_mode", "pseudo_only")
+        if self.pcr_enabled:
+            logging_training.info(f"PCR enabled: mu={self.pcr_mu}, apply_mode={self.pcr_apply_mode}")
+
     @property
     def logger(self):
         return self._logger

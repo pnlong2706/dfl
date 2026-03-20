@@ -127,6 +127,12 @@ class Engine:
         self._fedsam_rho = config.participant.get("training_args", {}).get("fedsam", {}).get("rho", 0.5)
         logging.info(f"FedSAM enabled = {self._fedsam_enabled}, rho = {self._fedsam_rho}")
 
+        # PCR (Predicted Consensus Regularization) configuration
+        self._pcr_enabled = config.participant.get("training_args", {}).get("pcr", {}).get("enabled", False)
+        self._pcr_mu = config.participant.get("training_args", {}).get("pcr", {}).get("mu", 0.01)
+        self._pcr_apply_mode = config.participant.get("training_args", {}).get("pcr", {}).get("apply_mode", "pseudo_only")
+        logging.info(f"PCR enabled = {self._pcr_enabled}, mu = {self._pcr_mu}, apply_mode = {self._pcr_apply_mode}")
+
         self.security = security
 
         self._trainer = trainer(model, datamodule, config=self.config)
