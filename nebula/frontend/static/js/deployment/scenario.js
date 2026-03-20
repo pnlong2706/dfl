@@ -71,10 +71,8 @@ const ScenarioManager = (function() {
             partition_parameter: parseFloat(document.getElementById("partitionParameter").value),
             model: document.getElementById("modelSelect").value,
             agg_algorithm: document.getElementById("aggregationSelect").value,
-            pseudo_aggregation: {
-                enabled: window.PseudoAggManager.isEnabled(),
-                ema_alpha: window.PseudoAggManager.getEmaAlpha()
-            },
+            pseudo_aggregation: window.PseudoAggManager.getSettings(),
+            fedsam: window.FedSAMManager.getSettings(),
             mid_round_test: window.MidRoundTestManager.isEnabled(),
             logginglevel: document.getElementById("loggingLevel").value === "true",
             report_status_data_queue: document.getElementById("reportingSwitch").checked,
@@ -247,6 +245,9 @@ const ScenarioManager = (function() {
                 sar_training_policy: scenario.sar_training_policy,
             });
         }
+        if (scenario.fedsam) {
+            window.FedSAMManager.setSettings(scenario.fedsam);
+        }
 
         // Trigger necessary events
         document.getElementById("federationArchitecture").dispatchEvent(new Event('change'));
@@ -347,6 +348,9 @@ const ScenarioManager = (function() {
         }
         if (window.SaManager) {
             window.SaManager.resetSaConfig();
+        }
+        if (window.FedSAMManager) {
+            window.FedSAMManager.reset();
         }
 
         // Trigger necessary events

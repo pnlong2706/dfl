@@ -53,6 +53,7 @@ class Scenario:
         model,
         agg_algorithm,
         pseudo_aggregation,
+        fedsam,
         mid_round_test,
         rounds,
         logginglevel,
@@ -181,6 +182,7 @@ class Scenario:
         self.model = model
         self.agg_algorithm = agg_algorithm
         self.pseudo_aggregation = pseudo_aggregation if pseudo_aggregation else {"enabled": False, "ema_alpha": 0.25}
+        self.fedsam = fedsam if fedsam else {"enabled": False, "rho": 0.5}
         self.mid_round_test = mid_round_test if mid_round_test is not None else False
         self.rounds = rounds
         self.logginglevel = logginglevel
@@ -696,6 +698,7 @@ class ScenarioManagement:
             participant_config["model_args"]["model"] = self.scenario.model
             participant_config["training_args"]["epochs"] = int(self.scenario.epochs)
             participant_config["training_args"]["mid_round_test"] = self.scenario.mid_round_test
+            participant_config["training_args"]["fedsam"] = self.scenario.fedsam
             participant_config["device_args"]["accelerator"] = self.scenario.accelerator
             participant_config["device_args"]["gpu_id"] = self.scenario.gpu_id
             participant_config["device_args"]["logging"] = self.scenario.logginglevel
@@ -1204,7 +1207,7 @@ class ScenarioManagement:
                     "NVIDIA_DISABLE_REQUIRE": True,
                     "NEBULA_LOGS_DIR": "/nebula/app/logs/",
                     "NEBULA_CONFIG_DIR": "/nebula/app/config/",
-                    "CUDA_VISIBLE_DEVICES": "5,6,7",
+                    "CUDA_VISIBLE_DEVICES": "6,7",
                 }
                 visible_devices_str = os.environ.get("CUDA_VISIBLE_DEVICES")
                 if visible_devices_str is None:

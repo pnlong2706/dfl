@@ -196,6 +196,9 @@ class NebulaModel(pl.LightningModule, ABC):
         if confusion_matrix is None:
             self.cm = MulticlassConfusionMatrix(num_classes=num_classes)
             self.cm_global = MulticlassConfusionMatrix(num_classes=num_classes)
+        else:
+            self.cm = confusion_matrix
+            self.cm_global = MulticlassConfusionMatrix(num_classes=num_classes)
         if seed is not None:
             torch.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
@@ -217,6 +220,20 @@ class NebulaModel(pl.LightningModule, ABC):
 
         self._current_loss = -1
         self._optimizer = None
+
+        # FedSAM configuration
+        self.fedsam_enabled = False
+        self.fedsam_rho = 0.5
+        self._original_weights = {}  # For storing weights before perturbation
+
+    def set_fedsam_config(self, enabled, rho):
+        """Configure FedSAM training."""
+        self.fedsam_enabled = enabled
+        self.fedsam_rho = rho
+        if enabled:
+            # Switch to manual optimization for FedSAM
+            self.automatic_optimization = False
+            logging_training.info(f"FedSAM enabled: rho={rho}, switched to manual optimization")
 
     def set_communication_manager(self, communication_manager):
         self.communication_manager = communication_manager
@@ -271,13 +288,99 @@ class NebulaModel(pl.LightningModule, ABC):
     def training_step(self, batch, batch_idx):
         """
         Training step for the model.
+        Supports both standard training and FedSAM (double training on same batch).
+
         Args:
-            batch:
-            batch_id:
+            batch: (x, y) tuple
+            batch_idx: Batch index
 
         Returns:
+            loss: Training loss
         """
-        return self.step(batch, batch_idx=batch_idx, phase="Train")
+        if not self.fedsam_enabled:
+            # Standard training (automatic optimization)
+            return self.step(batch, batch_idx=batch_idx, phase="Train")
+        else:
+            # FedSAM: Simply train twice on the same mini-batch
+            x, y = batch
+            opt = self.optimizers()
+
+            # First training pass
+            y_pred = self.forward(x)
+            loss = self.criterion(y_pred, y)
+            opt.zero_grad()
+            self.manual_backward(loss)
+            opt.step()
+
+            # Second training pass on the SAME batch
+            y_pred = self.forward(x)
+            loss = self.criterion(y_pred, y)
+            opt.zero_grad()
+            self.manual_backward(loss)
+            opt.step()
+
+            # Process metrics with the final prediction
+            self.process_metrics("Train", y_pred, y, loss)
+            self._current_loss = loss
+
+            return loss
+
+    def _compute_gradient_norm(self):
+        """
+        Compute L2 norm of all gradients (flattened).
+
+        Returns:
+            float: L2 norm of gradients
+        """
+        grad_norm = 0.0
+        for p in self.parameters():
+            if p.grad is not None:
+                grad_norm += p.grad.data.norm(2).item() ** 2
+        return (grad_norm ** 0.5) + 1e-12  # Add epsilon for numerical stability
+
+    def _perturb_weights(self, scale):
+        """
+        Perturb weights: w_tilde = w + scale * g.
+        Store original weights for later restoration.
+
+        Args:
+            scale: Perturbation scale (rho / ||g||)
+        """
+        self._original_weights = {}
+        for name, p in self.named_parameters():
+            if p.grad is not None:
+                # Store original weight
+                self._original_weights[name] = p.data.clone()
+                # Perturb: w_tilde = w + scale * g
+                p.data.add_(p.grad.data, alpha=scale)
+
+    def _restore_weights(self):
+        """
+        Restore original weights before perturbation.
+        This allows optimizer to apply g_tilde to original w.
+        """
+        for name, p in self.named_parameters():
+            if name in self._original_weights:
+                p.data.copy_(self._original_weights[name])
+        self._original_weights = {}
+
+    def _disable_batchnorm_tracking(self):
+        """
+        Disable BatchNorm running statistics tracking.
+        Used during second forward pass in FedSAM to prevent corrupting statistics.
+        """
+        for module in self.modules():
+            if isinstance(module, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d, torch.nn.BatchNorm3d)):
+                module.track_running_stats = False
+
+    def _enable_batchnorm_tracking(self):
+        """
+        Re-enable BatchNorm running statistics tracking.
+        Called after second forward pass in FedSAM.
+        """
+        for module in self.modules():
+            if isinstance(module, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d, torch.nn.BatchNorm3d)):
+                module.track_running_stats = True
 
     def on_train_start(self):
         logging_training.info(f"{'=' * 10} [Training] Started {'=' * 10}")

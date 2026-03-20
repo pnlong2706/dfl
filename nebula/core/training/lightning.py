@@ -143,6 +143,15 @@ class Lightning:
         self.create_json_logger()
         enable_deterministic(seed=self.config.participant["scenario_args"]["random_seed"])
 
+        # FedSAM configuration
+        self.fedsam_enabled = config.participant.get("training_args", {}).get("fedsam", {}).get("enabled", False)
+        self.fedsam_rho = config.participant.get("training_args", {}).get("fedsam", {}).get("rho", 0.5)
+        if self.fedsam_enabled:
+            logging_training.info(f"FedSAM training enabled with rho={self.fedsam_rho}")
+            # Pass FedSAM config to model
+            if hasattr(self.model, 'set_fedsam_config'):
+                self.model.set_fedsam_config(self.fedsam_enabled, self.fedsam_rho)
+
     @property
     def logger(self):
         return self._logger

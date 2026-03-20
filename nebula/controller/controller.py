@@ -263,7 +263,7 @@ async def get_available_gpu():
                     available_gpus.append(i)
 
             return {
-                "available_gpus": [0, 1, 2],
+                "available_gpus": [0, 1],
             }
         except Exception:  # noqa: S110
             pass
