@@ -216,12 +216,11 @@ class Lightning:
         self.create_logger()
         num_gpus = len(self.config.participant["device_args"]["gpu_id"])
         if self.config.participant["device_args"]["accelerator"] == "gpu" and num_gpus > 0:
-            # Use all available GPUs
+            gpu_ids = self.config.participant["device_args"]["gpu_id"]
             if num_gpus > 1:
-                gpu_index = [self.config.participant["device_args"]["idx"] % num_gpus]
-            # Use the selected GPU
+                gpu_index = [gpu_ids[self.config.participant["device_args"]["idx"] % num_gpus]]
             else:
-                gpu_index = self.config.participant["device_args"]["gpu_id"]
+                gpu_index = gpu_ids
             logging_training.info(f"Creating trainer with accelerator GPU ({gpu_index})")
             self._trainer = Trainer(
                 callbacks=[ModelSummary(max_depth=1), NebulaProgressBar()],
