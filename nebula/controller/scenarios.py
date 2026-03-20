@@ -1206,16 +1206,20 @@ class ScenarioManagement:
             name = f"{os.environ.get('NEBULA_CONTROLLER_NAME')}_{self.user}-participant{node['device_args']['idx']}"
 
             if node["device_args"]["accelerator"] == "gpu":
+                # Use gpu_id from config to determine which GPUs to expose
+                gpu_ids = node["device_args"].get("gpu_id", [])
+                if gpu_ids:
+                    device_ids = [str(g) for g in gpu_ids]
+                    cuda_visible = ",".join(str(i) for i in range(len(gpu_ids)))
+                else:
+                    device_ids = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")
+                    cuda_visible = ",".join(str(i) for i in range(len(device_ids)))
                 environment = {
                     "NVIDIA_DISABLE_REQUIRE": True,
                     "NEBULA_LOGS_DIR": "/nebula/app/logs/",
                     "NEBULA_CONFIG_DIR": "/nebula/app/config/",
-                    "CUDA_VISIBLE_DEVICES": "6,7",
+                    "CUDA_VISIBLE_DEVICES": cuda_visible,
                 }
-                visible_devices_str = os.environ.get("CUDA_VISIBLE_DEVICES")
-                if visible_devices_str is None:
-                    visible_devices_str = '4,5,6,7' #TODO: fix hardcode
-                device_ids = visible_devices_str.split(',')
 
                 host_config = client.api.create_host_config(
                     binds=[f"{self.root_path}:/nebula", "/var/run/docker.sock:/var/run/docker.sock"],
