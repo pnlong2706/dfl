@@ -165,3 +165,4 @@ json_outputs/
 
 # AI assistant documentation (local only)
 CLAUDE.md
+.claude/
