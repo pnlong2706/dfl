@@ -226,6 +226,11 @@ class NebulaModel(pl.LightningModule, ABC):
         self.fedsam_rho = 0.5
         self._original_weights = {}  # For storing weights before perturbation
 
+        # PCR configuration
+        self.pcr_enabled = False
+        self.pcr_anchor = None  # state_dict snapshot before training
+        self.pcr_mu = 0.01
+
     def set_fedsam_config(self, enabled, rho):
         """Configure FedSAM training."""
         self.fedsam_enabled = enabled
@@ -234,6 +239,28 @@ class NebulaModel(pl.LightningModule, ABC):
             # Switch to manual optimization for FedSAM
             self.automatic_optimization = False
             logging_training.info(f"FedSAM enabled: rho={rho}, switched to manual optimization")
+
+    def set_pcr_config(self, anchor, mu):
+        """Enable PCR with given anchor (state_dict snapshot) and regularization strength."""
+        self.pcr_enabled = True
+        self.pcr_anchor = anchor
+        self.pcr_mu = mu
+
+    def disable_pcr(self):
+        """Disable PCR regularization."""
+        self.pcr_enabled = False
+        self.pcr_anchor = None
+
+    def compute_pcr_loss(self):
+        """Compute PCR proximal regularization: (mu/2) * ||w - w_anchor||^2."""
+        if not self.pcr_enabled or self.pcr_anchor is None:
+            return 0.0
+        pcr_loss = 0.0
+        for name, param in self.named_parameters():
+            if name in self.pcr_anchor:
+                anchor_param = self.pcr_anchor[name].to(param.device)
+                pcr_loss += torch.sum((param - anchor_param) ** 2)
+        return (self.pcr_mu / 2.0) * pcr_loss
 
     def set_communication_manager(self, communication_manager):
         self.communication_manager = communication_manager
@@ -298,8 +325,14 @@ class NebulaModel(pl.LightningModule, ABC):
             loss: Training loss
         """
         if not self.fedsam_enabled:
-            # Standard training (automatic optimization)
-            return self.step(batch, batch_idx=batch_idx, phase="Train")
+            # Standard training with optional PCR
+            x, y = batch
+            y_pred = self.forward(x)
+            loss = self.criterion(y_pred, y)
+            loss = loss + self.compute_pcr_loss()
+            self.process_metrics("Train", y_pred, y, loss)
+            self._current_loss = loss
+            return loss
         else:
             # FedSAM: Simply train twice on the same mini-batch
             x, y = batch
@@ -307,14 +340,14 @@ class NebulaModel(pl.LightningModule, ABC):
 
             # First training pass
             y_pred = self.forward(x)
-            loss = self.criterion(y_pred, y)
+            loss = self.criterion(y_pred, y) + self.compute_pcr_loss()
             opt.zero_grad()
             self.manual_backward(loss)
             opt.step()
 
             # Second training pass on the SAME batch
             y_pred = self.forward(x)
-            loss = self.criterion(y_pred, y)
+            loss = self.criterion(y_pred, y) + self.compute_pcr_loss()
             opt.zero_grad()
             self.manual_backward(loss)
             opt.step()
