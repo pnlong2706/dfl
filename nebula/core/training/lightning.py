@@ -417,8 +417,28 @@ class Lightning:
             return self.serialize_model(self.model.state_dict())
         return self.model.state_dict()
 
+    def _apply_pcr_before_training(self):
+        """Snapshot model as PCR anchor and enable PCR in the model if conditions are met."""
+        if not self.pcr_enabled:
+            self.model.disable_pcr()
+            return
+
+        should_apply = False
+        if self.pcr_apply_mode == "all_rounds":
+            should_apply = True
+        elif self.pcr_apply_mode == "pseudo_only":
+            should_apply = self.is_pseudo_round
+
+        if should_apply:
+            anchor = copy.deepcopy(self.model.state_dict())
+            self.model.set_pcr_config(anchor, self.pcr_mu)
+            logging_training.info(f"PCR active this round: mu={self.pcr_mu}, is_pseudo={self.is_pseudo_round}")
+        else:
+            self.model.disable_pcr()
+
     async def train(self):
         try:
+            self._apply_pcr_before_training()
             self.create_trainer()
             logging.info(f"{'=' * 10} [Training] Started (check training logs for progress) {'=' * 10}")
             await asyncio.to_thread(self._train_sync)
