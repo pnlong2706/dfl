@@ -54,6 +54,7 @@ class Scenario:
         agg_algorithm,
         pseudo_aggregation,
         fedsam,
+        pcr,
         mid_round_test,
         rounds,
         logginglevel,
@@ -183,6 +184,7 @@ class Scenario:
         self.agg_algorithm = agg_algorithm
         self.pseudo_aggregation = pseudo_aggregation if pseudo_aggregation else {"enabled": False, "ema_alpha": 0.25}
         self.fedsam = fedsam if fedsam else {"enabled": False, "rho": 0.5}
+        self.pcr = pcr if pcr else {"enabled": False, "mu": 0.01, "apply_mode": "pseudo_only"}
         self.mid_round_test = mid_round_test if mid_round_test is not None else False
         self.rounds = rounds
         self.logginglevel = logginglevel
@@ -699,6 +701,7 @@ class ScenarioManagement:
             participant_config["training_args"]["epochs"] = int(self.scenario.epochs)
             participant_config["training_args"]["mid_round_test"] = self.scenario.mid_round_test
             participant_config["training_args"]["fedsam"] = self.scenario.fedsam
+            participant_config["training_args"]["pcr"] = self.scenario.pcr
             participant_config["device_args"]["accelerator"] = self.scenario.accelerator
             participant_config["device_args"]["gpu_id"] = self.scenario.gpu_id
             participant_config["device_args"]["logging"] = self.scenario.logginglevel
