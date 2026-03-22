@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-Script to run a DFL experiment with custom configuration.
+Script to run DFL experiments via the NEBULA UI/API.
+
+This script:
+1. Starts the NEBULA platform (frontend + controller)
+2. Uses the API to deploy experiments with custom configurations
+3. Experiments are tracked in the database automatically
+
 Based on the first experiment from DFL Experiment.tsv:
 - Dataset: CIFAR 10
 - Data distribution: Dir(0.3)
@@ -14,453 +20,418 @@ Based on the first experiment from DFL Experiment.tsv:
 
 import asyncio
 import json
+import logging
 import os
 import sys
-import subprocess
 import time
-import hashlib
+import subprocess
+import signal
 from datetime import datetime
 
-# Add the project root to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import requests
+from requests.exceptions import RequestException
 
-from nebula.addons.topologymanager import TopologyManager
-
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # EXPERIMENT CONFIGURATION
 # =============================================================================
 
+# Default ports
+CONTROLLER_PORT = 5050
+FRONTEND_PORT = 6060
+
+# Experiment configuration based on TSV first experiment
 EXPERIMENT_CONFIG = {
-    # Scenario settings
-    "scenario_name": "cifar10_dir03_ring_dfedavg",
-    "rounds": 100,
-    "epochs": 2,
+    # Scenario metadata
+    "scenario_title": "CIFAR10 Dir(0.3) Ring DFedAvg",
+    "scenario_description": "DFL experiment with CIFAR10, Dirichlet(0.3) distribution, Ring topology, FedAvg aggregation",
+    
+    # Deployment settings
+    "deployment": "process",  # "docker", "process", or "physical"
+    "federation": "DFL",  # Decentralized Federated Learning
+    
+    # Topology
+    "topology": "Ring",
     "n_nodes": 20,
     
     # Dataset settings
     "dataset": "CIFAR10",
-    "model": "SimpleNet",
     "iid": False,
     "partition_selection": "dirichlet",
-    "partition_parameter": 0.3,  # Dir(0.3)
+    "partition_parameter": 0.3,
     
-    # Topology settings
-    "topology": "Ring",
-    "federation": "DFL",  # Decentralized Federated Learning
+    # Model settings
+    "model": "SimpleNet",
     
-    # Aggregation settings
-    "aggregation_algorithm": "FedAvg",
+    # Training settings
+    "rounds": 100,
+    "epochs": 2,
+    
+    # Aggregation
+    "agg_algorithm": "FedAvg",
     
     # Attack settings (None for this experiment)
-    "attack": "No Attack",
-    "byzantine_percent": 0,
+    "attack_params": {
+        "attacks": "No Attack",
+        "poisoned_node_percent": 0,
+        "poisoned_sample_percent": 0,
+        "poisoned_noise_percent": 0
+    },
     
     # Defense settings (None for this experiment)
-    "defense": None,
+    "reputation": {"enabled": False},
     
     # Device settings
-    "accelerator": "cpu",  # Change to "gpu" if available
-    "gpu_id": None,
-    "logging": True,
+    "accelerator": "gpu",  # Change to "cpu" if no GPU available
+    "gpu_id": [0],  # GPU ID(s) to use
     
-    # Network settings
-    "base_port": 45000,
-    "base_ip": "127.0.0.1",
+    # Logging
+    "logginglevel": True,
     
-    # Directories
-    "log_dir": "./experiment_logs",
-    "config_dir": "./experiment_config",
+    # Network simulation
+    "network_simulation": False,
+    
+    # Mobility
+    "mobility": False,
+    "random_geo": False,
+    
+    # Trustworthiness
+    "with_trustworthiness": False,
+    
+    # Situational Awareness
+    "with_sa": False,
 }
 
 
 # =============================================================================
-# PARTICIPANT CONFIGURATION TEMPLATE
+# API CLIENT
 # =============================================================================
 
-def get_participant_template():
-    """Return the base participant configuration template."""
-    return {
-        "scenario_args": {
-            "name": "",
-            "start_time": "",
-            "federation": "DFL",
-            "rounds": 100,
-            "deployment": "process",
-            "controller": "127.0.0.1:5000",
-            "random_seed": 42,
-            "n_nodes": 0,
-            "config_version": "development"
-        },
-        "device_args": {
-            "uid": "",
-            "idx": 0,
-            "name": "",
-            "username": "pi",
-            "password": "pi",
-            "role": "trainer_aggregator",
-            "proxy": False,
-            "malicious": False,
-            "start": True,
-            "accelerator": "cpu",
-            "gpu_id": None,
-            "devices": "auto",
-            "strategy": "ddp",
-            "logging": True
-        },
-        "security_args": {
-            "certfile": "",
-            "keyfile": "",
-            "cafile": ""
-        },
-        "federation_args": {
-            "round": 0
-        },
-        "network_args": {
-            "ip": "127.0.0.1",
-            "port": 45000,
-            "addr": "",
-            "neighbors": "",
-            "interface": "eth0",
-            "simulation": False,
-            "bandwidth": "5Gbps",
-            "delay": "0ms",
-            "delay-distro": "0ms",
-            "delay-distribution": "normal",
-            "loss": "0%",
-            "duplicate": "0%",
-            "corrupt": "0%",
-            "reordering": "0%"
-        },
-        "adaptive_args": {
-            "model_similarity": True
-        },
-        "mobility_args": {
-            "latitude": "",
-            "longitude": "",
-            "change_geo_interval": 5,
-            "grace_time_mobility": 60,
-            "random_geo": True,
-            "mobility": False,
-            "mobility_type": "topology",
-            "topology_type": "Ring",
-            "radius_federation": 1000,
-            "scheme_mobility": "random",
-            "round_frequency": 1,
-            "neighbors_distance": {},
-            "additional_node": {
-                "status": False,
-                "time_start": 0,
-                "scheme": "random"
-            }
-        },
-        "data_args": {
-            "dataset": "CIFAR10",
-            "iid": False,
-            "num_workers": 4,
-            "partition_selection": "dirichlet",
-            "partition_parameter": 0.3
-        },
-        "model_args": {
-            "model": "SimpleNet"
-        },
-        "training_args": {
-            "trainer": "lightning",
-            "epochs": 2,
-            "batch_size": 32,
-            "optimizer": "adam",
-            "learning_rate": 0.001,
-            "momentum": 0.9,
-            "weight_decay": 0.0001,
-            "scheduler": "steplr",
-            "step_size": 10,
-            "gamma": 0.1
-        },
-        "aggregator_args": {
-            "algorithm": "FedAvg",
-            "aggregation_timeout": 180000,
-            "aggregation_push": "slow",
-            "pseudo_aggregation": {
-                "enabled": False,
-                "ema_alpha": 0.25
-            }
-        },
-        "defense_args": {
-            "reputation": {
-                "enabled": False,
-                "metrics": {},
-                "initial_reputation": 0.2,
-                "weighting_factor": "dynamic"
-            }
-        },
-        "adversarial_args": {
-            "attack_params": {
-                "attacks": "No Attack"
-            }
-        },
-        "tracking_args": {
-            "enable_remote_tracking": False,
-            "local_tracking": "basic",
-            "log_dir": "./experiment_logs",
-            "config_dir": "./experiment_config",
-            "run_hash": ""
-        },
-        "mender_args": {
-            "id": "",
-            "mac": "",
-            "device_type": ""
-        },
-        "message_args": {
-            "max_local_messages": 10000,
-            "compression": "zlib"
-        },
-        "reporter_args": {
-            "grace_time_reporter": 10,
-            "report_frequency": 5,
-            "report_status_data_queue": True
-        },
-        "discoverer_args": {
-            "grace_time_discovery": 0,
-            "discovery_frequency": 10,
-            "discovery_interval": 0.2
-        },
-        "health_args": {
-            "grace_time_health": 60,
-            "health_interval": 15,
-            "send_alive_interval": 0.2,
-            "check_alive_interval": 5,
-            "alive_timeout": 120
-        },
-        "forwarder_args": {
-            "forwarder_interval": 1,
-            "forward_messages_interval": 0,
-            "number_forwarded_messages": 100
-        },
-        "propagator_args": {
-            "propagate_interval": 3,
-            "propagate_model_interval": 0,
-            "propagation_early_stop": 3,
-            "history_size": 20
-        },
-        "misc_args": {
-            "grace_time_connection": 10,
-            "grace_time_start_federation": 10
-        }
-    }
-
-
-# =============================================================================
-# TOPOLOGY GENERATION
-# =============================================================================
-
-def generate_ring_neighbors(n_nodes):
-    """
-    Generate neighbor connections for a ring topology.
-    Each node connects to its two neighbors in the ring.
+class NebulaClient:
+    """Client for interacting with the NEBULA API."""
     
-    Returns a dict mapping node_idx -> list of neighbor addresses
-    """
-    neighbors = {}
-    for i in range(n_nodes):
-        # In a ring, each node connects to (i-1) and (i+1) mod n_nodes
-        left = (i - 1) % n_nodes
-        right = (i + 1) % n_nodes
-        neighbors[i] = [left, right]
-    return neighbors
-
-
-# =============================================================================
-# CONFIGURATION GENERATION
-# =============================================================================
-
-def generate_configs(config):
-    """Generate configuration files for all nodes."""
-    n_nodes = config["n_nodes"]
-    base_port = config["base_port"]
-    base_ip = config["base_ip"]
-    config_dir = config["config_dir"]
-    log_dir = config["log_dir"]
+    def __init__(self, base_url: str, username: str = "admin", password: str = "admin"):
+        self.base_url = base_url
+        self.username = username
+        self.password = password
+        self.session = requests.Session()
+        self.logged_in = False
     
-    # Create directories
-    os.makedirs(config_dir, exist_ok=True)
-    os.makedirs(os.path.join(log_dir, config["scenario_name"]), exist_ok=True)
-    
-    # Generate ring topology neighbors
-    neighbors_map = generate_ring_neighbors(n_nodes)
-    
-    # Generate timestamp
-    start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    config_files = []
-    
-    for i in range(n_nodes):
-        participant = get_participant_template()
-        
-        # Set unique port for each node
-        port = base_port + i
-        
-        # Update scenario args
-        participant["scenario_args"]["name"] = config["scenario_name"]
-        participant["scenario_args"]["start_time"] = start_time
-        participant["scenario_args"]["rounds"] = config["rounds"]
-        participant["scenario_args"]["n_nodes"] = n_nodes
-        participant["scenario_args"]["federation"] = config["federation"]
-        
-        # Update device args
-        participant["device_args"]["idx"] = i
-        participant["device_args"]["name"] = f"participant_{i}_{base_ip}_{port}"
-        participant["device_args"]["role"] = "trainer_aggregator"
-        participant["device_args"]["start"] = (i == 0)  # Only first node starts
-        participant["device_args"]["accelerator"] = config["accelerator"]
-        participant["device_args"]["gpu_id"] = config["gpu_id"]
-        participant["device_args"]["logging"] = config["logging"]
-        
-        # Generate UID
-        uid = hashlib.sha1(f"{base_ip}{port}{config['scenario_name']}".encode()).hexdigest()
-        participant["device_args"]["uid"] = uid
-        
-        # Update network args
-        participant["network_args"]["ip"] = base_ip
-        participant["network_args"]["port"] = port
-        participant["network_args"]["addr"] = f"{base_ip}:{port}"
-        
-        # Set neighbors based on ring topology
-        neighbor_addrs = []
-        for neighbor_idx in neighbors_map[i]:
-            neighbor_port = base_port + neighbor_idx
-            neighbor_addrs.append(f"{base_ip}:{neighbor_port}")
-        participant["network_args"]["neighbors"] = " ".join(neighbor_addrs)
-        
-        # Update data args
-        participant["data_args"]["dataset"] = config["dataset"]
-        participant["data_args"]["iid"] = config["iid"]
-        participant["data_args"]["partition_selection"] = config["partition_selection"]
-        participant["data_args"]["partition_parameter"] = config["partition_parameter"]
-        
-        # Update model args
-        participant["model_args"]["model"] = config["model"]
-        
-        # Update training args
-        participant["training_args"]["epochs"] = config["epochs"]
-        
-        # Update aggregator args
-        participant["aggregator_args"]["algorithm"] = config["aggregation_algorithm"]
-        
-        # Update adversarial args
-        participant["adversarial_args"]["attack_params"]["attacks"] = config["attack"]
-        
-        # Update tracking args
-        participant["tracking_args"]["log_dir"] = os.path.abspath(log_dir)
-        participant["tracking_args"]["config_dir"] = os.path.abspath(config_dir)
-        
-        # Update mobility args
-        participant["mobility_args"]["topology_type"] = config["topology"]
-        
-        # Save config file
-        config_file = os.path.join(config_dir, f"participant_{i}.json")
-        with open(config_file, "w") as f:
-            json.dump(participant, f, indent=2)
-        
-        config_files.append(config_file)
-        print(f"Generated config for node {i}: {config_file}")
-        print(f"  - Port: {port}")
-        print(f"  - Neighbors: {participant['network_args']['neighbors']}")
-    
-    # Save scenario summary
-    scenario_summary = {
-        "scenario_name": config["scenario_name"],
-        "n_nodes": n_nodes,
-        "topology": config["topology"],
-        "dataset": config["dataset"],
-        "model": config["model"],
-        "rounds": config["rounds"],
-        "epochs": config["epochs"],
-        "partition_selection": config["partition_selection"],
-        "partition_parameter": config["partition_parameter"],
-        "aggregation_algorithm": config["aggregation_algorithm"],
-        "start_time": start_time,
-    }
-    
-    summary_file = os.path.join(config_dir, "scenario_summary.json")
-    with open(summary_file, "w") as f:
-        json.dump(scenario_summary, f, indent=2)
-    
-    print(f"\nScenario summary saved to: {summary_file}")
-    
-    return config_files
-
-
-# =============================================================================
-# EXPERIMENT RUNNER
-# =============================================================================
-
-def run_experiment(config_files, config):
-    """Run the experiment by starting all nodes as processes."""
-    processes = []
-    
-    print("\n" + "="*60)
-    print("STARTING EXPERIMENT")
-    print("="*60)
-    print(f"Scenario: {config['scenario_name']}")
-    print(f"Nodes: {config['n_nodes']}")
-    print(f"Rounds: {config['rounds']}")
-    print(f"Dataset: {config['dataset']}")
-    print(f"Model: {config['model']}")
-    print("="*60 + "\n")
-    
-    # Start all nodes
-    for i, config_file in enumerate(config_files):
-        print(f"Starting node {i}...")
-        
-        # Start the node as a subprocess
-        cmd = [sys.executable, "-m", "nebula.core.node", config_file]
-        
-        # Create log file for this node
-        log_file = os.path.join(
-            config["log_dir"], 
-            config["scenario_name"], 
-            f"node_{i}.log"
-        )
-        
-        with open(log_file, "w") as log_f:
-            process = subprocess.Popen(
-                cmd,
-                stdout=log_f,
-                stderr=subprocess.STDOUT,
-                cwd=os.path.dirname(os.path.abspath(__file__))
+    def login(self) -> bool:
+        """Login to NEBULA and establish session."""
+        try:
+            response = self.session.post(
+                f"{self.base_url}/platform/login",
+                data={"username": self.username, "password": self.password},
+                allow_redirects=False
             )
-        
-        processes.append(process)
-        print(f"  Node {i} started with PID: {process.pid}")
-        
-        # Small delay between starting nodes
-        time.sleep(1)
+            if response.status_code in [200, 303, 302]:
+                self.logged_in = True
+                logger.info(f"Logged in as {self.username}")
+                return True
+            else:
+                logger.error(f"Login failed: {response.status_code}")
+                return False
+        except RequestException as e:
+            logger.error(f"Login error: {e}")
+            return False
     
-    print("\n" + "="*60)
-    print("ALL NODES STARTED")
-    print("="*60)
-    print(f"Total processes: {len(processes)}")
-    print("Press Ctrl+C to stop the experiment")
-    print("="*60 + "\n")
-    
-    try:
-        # Wait for all processes to complete
-        for i, process in enumerate(processes):
-            process.wait()
-            print(f"Node {i} finished with return code: {process.returncode}")
-    except KeyboardInterrupt:
-        print("\n\nReceived interrupt signal. Stopping all nodes...")
-        for i, process in enumerate(processes):
-            process.terminate()
-            print(f"Terminated node {i}")
+    def wait_for_service(self, timeout: int = 60) -> bool:
+        """Wait for the NEBULA service to be available."""
+        logger.info(f"Waiting for NEBULA service at {self.base_url}...")
+        start_time = time.time()
         
-        # Wait for processes to terminate
-        for process in processes:
-            process.wait()
+        while time.time() - start_time < timeout:
+            try:
+                response = self.session.get(f"{self.base_url}/platform", timeout=5)
+                if response.status_code == 200:
+                    logger.info("NEBULA service is available")
+                    return True
+            except RequestException:
+                pass
+            time.sleep(2)
         
-        print("All nodes stopped.")
+        logger.error("Timeout waiting for NEBULA service")
+        return False
     
-    return processes
+    def deploy_scenario(self, scenario_data: dict) -> dict:
+        """
+        Deploy a scenario via the API.
+        
+        Args:
+            scenario_data: Scenario configuration dictionary
+            
+        Returns:
+            Response data with scenario name
+        """
+        if not self.logged_in:
+            if not self.login():
+                return {"error": "Not logged in"}
+        
+        try:
+            # The frontend expects a list of scenarios
+            response = self.session.post(
+                f"{self.base_url}/platform/dashboard/deployment/run",
+                json=[scenario_data],
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                logger.info("Scenario deployment initiated")
+                return {"status": "success", "message": "Scenario deployed"}
+            else:
+                logger.error(f"Deployment failed: {response.status_code} - {response.text}")
+                return {"error": f"Deployment failed: {response.status_code}"}
+                
+        except RequestException as e:
+            logger.error(f"Deployment error: {e}")
+            return {"error": str(e)}
+    
+    def get_running_scenarios(self) -> list:
+        """Get list of running scenarios."""
+        try:
+            response = self.session.get(
+                f"{self.base_url}/platform/api/dashboard/runningscenario"
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("scenario_status") == "running":
+                    return [data]
+            return []
+        except RequestException as e:
+            logger.error(f"Error getting running scenarios: {e}")
+            return []
+    
+    def get_scenarios(self) -> list:
+        """Get list of all scenarios."""
+        try:
+            response = self.session.get(f"{self.base_url}/platform/api/dashboard")
+            if response.status_code == 200:
+                return response.json()
+            return []
+        except RequestException as e:
+            logger.error(f"Error getting scenarios: {e}")
+            return []
+    
+    def stop_scenario(self, scenario_name: str, stop_all: bool = False) -> bool:
+        """Stop a running scenario."""
+        try:
+            response = self.session.get(
+                f"{self.base_url}/platform/dashboard/{scenario_name}/stop/{stop_all}"
+            )
+            return response.status_code in [200, 303, 302]
+        except RequestException as e:
+            logger.error(f"Error stopping scenario: {e}")
+            return False
+
+
+# =============================================================================
+# PLATFORM MANAGER
+# =============================================================================
+
+class NebulaPlatform:
+    """Manages the NEBULA platform lifecycle."""
+    
+    def __init__(self, script_path: str = "script/run_dfl.sh", username: str = "admin"):
+        self.script_path = script_path
+        self.username = username
+        self.process = None
+        self.client = None
+    
+    def start(self) -> bool:
+        """Start the NEBULA platform."""
+        logger.info("Starting NEBULA platform...")
+        
+        # Check if script exists
+        if not os.path.exists(self.script_path):
+            logger.error(f"Script not found: {self.script_path}")
+            logger.info("Please run: make install")
+            return False
+        
+        try:
+            # Start the platform using the script
+            self.process = subprocess.Popen(
+                ["bash", self.script_path, self.username],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                preexec_fn=os.setsid,
+                cwd=os.getcwd()
+            )
+            
+            logger.info(f"NEBULA process started (PID: {self.process.pid})")
+            
+            # Initialize API client
+            self.client = NebulaClient(
+                f"http://localhost:{FRONTEND_PORT}",
+                username=self.username
+            )
+            
+            # Wait for service to be available
+            if self.client.wait_for_service(timeout=120):
+                logger.info(f"NEBULA UI available at: http://localhost:{FRONTEND_PORT}")
+                return True
+            else:
+                logger.error("Failed to start NEBULA platform")
+                self.stop()
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error starting platform: {e}")
+            return False
+    
+    def stop(self):
+        """Stop the NEBULA platform."""
+        if self.process:
+            logger.info("Stopping NEBULA platform...")
+            try:
+                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+                self.process.wait(timeout=10)
+            except Exception as e:
+                logger.warning(f"Error stopping process: {e}")
+                try:
+                    os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
+                except Exception:
+                    pass
+            self.process = None
+            logger.info("NEBULA platform stopped")
+    
+    def deploy_experiment(self, config: dict) -> dict:
+        """Deploy an experiment via the API."""
+        if not self.client:
+            logger.error("Platform not started")
+            return {"error": "Platform not started"}
+        
+        # Login if needed
+        if not self.client.logged_in:
+            if not self.client.login():
+                return {"error": "Login failed"}
+        
+        return self.client.deploy_scenario(config)
+
+
+# =============================================================================
+# EXPERIMENT BUILDER
+# =============================================================================
+
+def build_scenario_from_config(config: dict) -> dict:
+    """
+    Build a complete scenario configuration from a simplified config.
+    
+    This creates the full scenario data structure expected by the NEBULA frontend.
+    """
+    scenario = {
+        # Metadata
+        "scenario_title": config.get("scenario_title", "Experiment"),
+        "scenario_description": config.get("scenario_description", ""),
+        
+        # Deployment
+        "deployment": config.get("deployment", "process"),
+        "federation": config.get("federation", "DFL"),
+        
+        # Topology
+        "topology": config.get("topology", "Ring"),
+        "n_nodes": config.get("n_nodes", 20),
+        "nodes": {},
+        "nodes_graph": {},
+        "matrix": [],
+        
+        # Dataset
+        "dataset": config.get("dataset", "CIFAR10"),
+        "iid": config.get("iid", False),
+        "partition_selection": config.get("partition_selection", "dirichlet"),
+        "partition_parameter": config.get("partition_parameter", 0.3),
+        
+        # Model
+        "model": config.get("model", "SimpleNet"),
+        
+        # Training
+        "rounds": config.get("rounds", 100),
+        "epochs": config.get("epochs", 2),
+        
+        # Aggregation
+        "agg_algorithm": config.get("agg_algorithm", "FedAvg"),
+        "pseudo_aggregation": {"enabled": False, "ema_alpha": 0.25},
+        "fedsam": {"enabled": False, "rho": 0.5},
+        "pcr": {"enabled": False, "mu": 0.01, "apply_mode": "pseudo_only"},
+        "mid_round_test": False,
+        
+        # Attack
+        "attack_params": config.get("attack_params", {"attacks": "No Attack"}),
+        
+        # Defense
+        "reputation": config.get("reputation", {"enabled": False}),
+        
+        # Device
+        "accelerator": config.get("accelerator", "gpu"),
+        "gpu_id": config.get("gpu_id", [0]),
+        "logginglevel": config.get("logginglevel", True),
+        "report_status_data_queue": True,
+        
+        # Network
+        "network_simulation": config.get("network_simulation", False),
+        "network_subnet": "",
+        "network_gateway": "",
+        
+        # Mobility
+        "mobility": config.get("mobility", False),
+        "random_geo": config.get("random_geo", False),
+        "latitude": "",
+        "longitude": "",
+        "mobility_type": "",
+        "radius_federation": 1000,
+        "scheme_mobility": "random",
+        "round_frequency": 1,
+        "mobile_participants_percent": 0,
+        "additional_participants": [],
+        "schema_additional_participants": "random",
+        
+        # Trustworthiness
+        "with_trustworthiness": config.get("with_trustworthiness", False),
+        "robustness_pillar": {},
+        "resilience_to_attacks": {},
+        "algorithm_robustness": {},
+        "client_reliability": {},
+        "privacy_pillar": {},
+        "technique": {},
+        "uncertainty": {},
+        "indistinguishability": {},
+        "fairness_pillar": {},
+        "selection_fairness": {},
+        "performance_fairness": {},
+        "class_distribution": {},
+        "explainability_pillar": {},
+        "interpretability": {},
+        "post_hoc_methods": {},
+        "accountability_pillar": {},
+        "factsheet_completeness": {},
+        "architectural_soundness_pillar": {},
+        "client_management": {},
+        "optimization": {},
+        "sustainability_pillar": {},
+        "energy_source": {},
+        "hardware_efficiency": {},
+        "federation_complexity": {},
+        
+        # Situational Awareness
+        "with_sa": config.get("with_sa", False),
+        "strict_topology": True,
+        "random_topology_probability": 0.2,
+        "sad_candidate_selector": "ring",
+        "sad_model_handler": "std",
+        "sar_arbitration_policy": "static",
+        "sar_neighbor_policy": "idle",
+        "sar_training": False,
+        "sar_training_policy": "idle",
+    }
+    
+    return scenario
 
 
 # =============================================================================
@@ -469,30 +440,83 @@ def run_experiment(config_files, config):
 
 def main():
     """Main entry point."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Run DFL experiments via NEBULA UI")
+    parser.add_argument("--username", default="admin", help="NEBULA username")
+    parser.add_argument("--port", type=int, default=FRONTEND_PORT, help="Frontend port")
+    parser.add_argument("--no-start", action="store_true", help="Don't start platform (assume already running)")
+    parser.add_argument("--stop-after", action="store_true", help="Stop platform after experiment")
+    parser.add_argument("--wait", action="store_true", help="Wait for experiment to complete")
+    
+    args = parser.parse_args()
+    
     print("="*60)
-    print("NEBULA DFL EXPERIMENT RUNNER")
+    print("NEBULA DFL EXPERIMENT RUNNER (UI/API)")
     print("="*60)
     print("\nExperiment Configuration:")
     for key, value in EXPERIMENT_CONFIG.items():
         print(f"  {key}: {value}")
     print()
     
-    # Generate configuration files
-    print("Generating configuration files...")
-    config_files = generate_configs(EXPERIMENT_CONFIG)
+    # Initialize platform
+    platform = NebulaPlatform(username=args.username)
     
-    print(f"\nGenerated {len(config_files)} configuration files.")
-    print(f"Config directory: {EXPERIMENT_CONFIG['config_dir']}")
-    print(f"Log directory: {EXPERIMENT_CONFIG['log_dir']}")
+    try:
+        if not args.no_start:
+            # Start the platform
+            if not platform.start():
+                logger.error("Failed to start NEBULA platform")
+                sys.exit(1)
+        else:
+            # Connect to existing platform
+            platform.client = NebulaClient(f"http://localhost:{args.port}", username=args.username)
+            if not platform.client.wait_for_service(timeout=30):
+                logger.error("NEBULA platform not available. Start it first or remove --no-start")
+                sys.exit(1)
+        
+        # Build scenario
+        scenario = build_scenario_from_config(EXPERIMENT_CONFIG)
+        
+        # Deploy experiment
+        logger.info("Deploying experiment...")
+        result = platform.deploy_experiment(scenario)
+        
+        if "error" in result:
+            logger.error(f"Failed to deploy experiment: {result['error']}")
+            sys.exit(1)
+        
+        logger.info("Experiment deployed successfully!")
+        logger.info(f"UI available at: http://localhost:{FRONTEND_PORT}/platform/dashboard")
+        
+        if args.wait:
+            logger.info("Waiting for experiment to complete...")
+            logger.info("Press Ctrl+C to stop waiting")
+            
+            try:
+                while True:
+                    running = platform.client.get_running_scenarios()
+                    if not running:
+                        logger.info("Experiment completed")
+                        break
+                    time.sleep(10)
+            except KeyboardInterrupt:
+                logger.info("Stopped waiting")
+        
+        if not args.stop_after and not args.wait:
+            logger.info("Experiment is running. Press Ctrl+C to stop the platform")
+            while True:
+                time.sleep(1)
     
-    # Ask for confirmation before starting
-    response = input("\nStart the experiment? (y/n): ")
-    if response.lower() != 'y':
-        print("Experiment cancelled.")
-        return
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
     
-    # Run the experiment
-    run_experiment(config_files, EXPERIMENT_CONFIG)
+    finally:
+        if args.stop_after:
+            platform.stop()
+        else:
+            logger.info(f"Platform still running at http://localhost:{FRONTEND_PORT}")
+            logger.info("Run 'python app/main.py --stop' to stop it later")
 
 
 if __name__ == "__main__":
