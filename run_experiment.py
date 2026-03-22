@@ -161,6 +161,29 @@ class NebulaClient:
         logger.error("Timeout waiting for NEBULA service")
         return False
     
+    def initialize_user_data(self) -> bool:
+        """
+        Initialize user data by visiting the dashboard.
+        
+        The NEBULA frontend creates UserData on first dashboard visit.
+        This must be called before deploying scenarios.
+        """
+        try:
+            # Visit dashboard to initialize user_data_store
+            response = self.session.get(
+                f"{self.base_url}/platform/dashboard",
+                allow_redirects=True
+            )
+            if response.status_code == 200:
+                logger.info("User data initialized")
+                return True
+            else:
+                logger.warning(f"Dashboard visit returned: {response.status_code}")
+                return False
+        except RequestException as e:
+            logger.error(f"Error initializing user data: {e}")
+            return False
+    
     def deploy_scenario(self, scenario_data: dict) -> dict:
         """
         Deploy a scenario via the API.
@@ -175,15 +198,20 @@ class NebulaClient:
             if not self.login():
                 return {"error": "Not logged in"}
         
+        # Initialize user data by visiting dashboard first
+        self.initialize_user_data()
+        
         try:
             # The frontend expects a list of scenarios
             response = self.session.post(
                 f"{self.base_url}/platform/dashboard/deployment/run",
                 json=[scenario_data],
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
+                allow_redirects=False
             )
             
-            if response.status_code == 200:
+            # Accept 200, 303, or 302 as success (redirect to dashboard is expected)
+            if response.status_code in [200, 303, 302]:
                 logger.info("Scenario deployment initiated")
                 return {"status": "success", "message": "Scenario deployed"}
             else:
