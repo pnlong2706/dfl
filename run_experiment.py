@@ -184,6 +184,50 @@ class NebulaClient:
             logger.error(f"Error initializing user data: {e}")
             return False
     
+    def deploy_scenario_via_controller(self, scenario_data: dict, role: str = "admin", user: str = "admin") -> dict:
+        """
+        Deploy a scenario directly via the controller API, bypassing frontend GPU assignment.
+        
+        This method calls the controller's /scenarios/run endpoint directly,
+        which avoids the frontend's assign_available_gpu function that can
+        override GPU settings.
+        
+        Args:
+            scenario_data: Scenario configuration dictionary
+            role: User role (default: "admin")
+            user: Username (default: "admin")
+            
+        Returns:
+            Response data with scenario name
+        """
+        try:
+            # Call controller directly
+            controller_url = f"http://localhost:{CONTROLLER_PORT}/scenarios/run"
+            payload = {
+                "scenario_data": scenario_data,
+                "role": role,
+                "user": user
+            }
+            
+            response = requests.post(
+                controller_url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=300  # 5 minute timeout for scenario initialization
+            )
+            
+            if response.status_code == 200:
+                scenario_name = response.json() if response.text else None
+                logger.info(f"Scenario deployed via controller: {scenario_name}")
+                return {"status": "success", "scenario_name": scenario_name}
+            else:
+                logger.error(f"Controller deployment failed: {response.status_code} - {response.text}")
+                return {"error": f"Deployment failed: {response.status_code}", "details": response.text}
+                
+        except RequestException as e:
+            logger.error(f"Controller deployment error: {e}")
+            return {"error": str(e)}
+    
     def deploy_scenario(self, scenario_data: dict) -> dict:
         """
         Deploy a scenario via the API.
@@ -330,8 +374,14 @@ class NebulaPlatform:
             self.process = None
             logger.info("NEBULA platform stopped")
     
-    def deploy_experiment(self, config: dict) -> dict:
-        """Deploy an experiment via the API."""
+    def deploy_experiment(self, config: dict, use_controller: bool = True) -> dict:
+        """
+        Deploy an experiment via the API.
+        
+        Args:
+            config: Scenario configuration dictionary
+            use_controller: If True, deploy directly via controller API (bypasses frontend GPU assignment)
+        """
         if not self.client:
             logger.error("Platform not started")
             return {"error": "Platform not started"}
@@ -341,7 +391,12 @@ class NebulaPlatform:
             if not self.client.login():
                 return {"error": "Login failed"}
         
-        return self.client.deploy_scenario(config)
+        if use_controller:
+            # Deploy directly via controller to bypass frontend GPU assignment
+            return self.client.deploy_scenario_via_controller(config, role="admin", user="admin")
+        else:
+            # Deploy via frontend (may have GPU assignment issues)
+            return self.client.deploy_scenario(config)
 
 
 # =============================================================================
