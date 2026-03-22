@@ -1,0 +1,108 @@
+															
+	DFL Experiment														
+															
+	For model: Using SimpleNet for CIFAR10/100, CNN for MNIST.							Note: For pseudo running, always enable Pseudo option in Nebula	Note: Random topo will have random probability 0.2						
+	Default: 100 rounds, 2 epochs/round, 20 nodes.							Note: For normal running,  enable mid-round testing in Nebula if comparing againt Pseu							
+															
+	Dataset	Data distribution	Topology	Aggregation	Status	Byzantine percentage	Attack	Defense	Note	Port	Scenario title	ID	Legend	Figure link	Figure_id
+	CIFAR 10	Dir(0.3)	Ring	DFedAvg	Pending	0%	None	None							
+				DFedAvg + PCR	Pending	0%	None	None							
+				Pseu DFedAvg + PCR		0%	None	None							
+				DFedSAM		0%	None	None							
+				DFedSam + PCR		0%	None	None							
+															
+	CIFAR 10	Dir(0.05)	Ring	DFedAvg		0%	None	None							
+				DFedAvg + PCR		0%	None	None							
+				Pseu DFedAvg + PCR		0%	None	None							
+				DFedSAM		0%	None	None							
+				DFedSam + PCR		0%	None	None							
+															
+	CIFAR 100	Dir(0.3)	Ring	DFedAvg		0%	None	None							
+				DFedAvg + PCR		0%	None	None							
+				Pseu DFedAvg + PCR		0%	None	None							
+				DFedSAM		0%	None	None							
+				DFedSam + PCR		0%	None	None							
+															
+	CIFAR 100	Dir(0.05)	Ring	DFedAvg		0%	None	None							
+				DFedAvg + PCR		0%	None	None							
+				Pseu DFedAvg + PCR		0%	None	None							
+				DFedSAM		0%	None	None							
+				DFedSam + PCR		0%	None	None							
+															
+	CIFAR 10	Dir(0.05)	Random	DFedAvg		0%	None	None							
+				DFedAvg + PCR		0%	None	None							
+				Pseu DFedAvg + PCR		0%	None	None							
+															
+															
+															
+															
+															
+															
+															
+															
+															
+															
+	Dataset	Data distribution	Topology	Aggregation	Status	Byzantine percentage	Attack	Defense	Note	Port	Scenario title	ID	Legend	Figure link	Figure_id
+	MNIST	Dir(0.3)	Ring	DFedAvg		10%	Label Flipping	PRT							
+								BALANCE							
+								RTC							
+								None							
+								SCCLIP							
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg		10%	Gaussian Model Posoining	PRT							
+								BALANCE							
+								RTC							
+								None							
+								SCCLIP							
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg		10%	Trim Model Poisoning	PRT							
+								BALANCE							
+								RTC							
+								None							
+								SCCLIP							
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg		10%	Krum Model Poisoning	PRT							
+								BALANCE							
+								RTC							
+								None							
+								SCCLIP							
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg		10%	ALIE	PRT							
+								BALANCE							
+								RTC							
+								None							
+								SCCLIP							
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg		10%	DISSENSUS	PRT							
+								BALANCE							
+								RTC							
+								None							
+								SCCLIP							
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg		20%	DISSENSUS	PRT							
+								BALANCE							
+								RTC							
+								None							
+								SCCLIP							
+															
+	CIFAR 10	Dir(0.3)	Ring	DFedAvg		20%	DISSENSUS	PRT							
+								BALANCE							
+								RTC							
+								None							
+								SCCLIP							
+															
+															
+															
+															
+	Dataset	Data distribution	Topology	Aggregation	Status	Byzantine percentage	Attack	Defense	Note	Port	Scenario title	ID	Legend	Figure link	Figure_id
+	MNIST	Dir(0.05)	Ring	DFedAvg + PCR		10%	DISSENSUS	PRT							
+				DFedAvg				PRT							
+				DFedAvg				None							
+				DFedAvg				RTC							
+				DFedAvg + PCR				RTC							
+															
+	CIFAR 10	Dir(0.05)	Ring	DFedAvg + PCR		10%	DISSENSUS	PRT							
+				DFedAvg				PRT							
+				DFedAvg				None							
+				DFedAvg				RTC							
+				DFedAvg + PCR				RTC							
