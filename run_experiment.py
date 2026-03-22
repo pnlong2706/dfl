@@ -201,6 +201,14 @@ class NebulaClient:
             Response data with scenario name
         """
         try:
+            # Debug: Log the nodes being sent
+            nodes_count = len(scenario_data.get("nodes", {}))
+            logger.info(f"Deploying scenario with {nodes_count} nodes")
+            if nodes_count == 0:
+                logger.error("ERROR: nodes dictionary is empty! This will fail.")
+            else:
+                logger.info(f"First node: {list(scenario_data['nodes'].keys())[0]} -> {scenario_data['nodes'][list(scenario_data['nodes'].keys())[0]]}")
+            
             # Call controller directly
             controller_url = f"http://localhost:{CONTROLLER_PORT}/scenarios/run"
             payload = {

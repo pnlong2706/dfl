@@ -237,7 +237,7 @@ async def get_available_gpu():
         dict: A dictionary with a list of GPU indices that are mostly free (usage < 5%).
     """
     available_gpus = []
-    visible_devices_str = os.environ.get("CUDA_VISIBLE_DEVICES", "4,5,6,7")
+    visible_devices_str = os.environ.get("CUDA_VISIBLE_DEVICES", "0,1,2,3")
     logging.info(f"-----------------------CUDA_VISIBLE_DEVICES: {visible_devices_str}")
 
     for device in visible_devices_str.split(','):
