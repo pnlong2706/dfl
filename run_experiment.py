@@ -129,7 +129,7 @@ class NebulaClient:
         try:
             response = self.session.post(
                 f"{self.base_url}/platform/login",
-                data={"username": self.username, "password": self.password},
+                data={"user": self.username, "password": self.password},
                 allow_redirects=False
             )
             if response.status_code in [200, 303, 302]:
