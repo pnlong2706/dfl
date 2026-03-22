@@ -345,6 +345,106 @@ class NebulaPlatform:
 
 
 # =============================================================================
+# TOPOLOGY GENERATOR
+# =============================================================================
+
+def generate_topology(n_nodes: int, topology: str, federation: str) -> tuple:
+    """
+    Generate nodes dictionary and adjacency matrix based on topology type.
+    
+    This replicates the JavaScript logic from nebula/frontend/static/js/deployment/topology.js
+    
+    Args:
+        n_nodes: Number of nodes
+        topology: Topology type ("Ring", "Star", "Fully", "Random")
+        federation: Federation type ("CFL", "SFL", "DFL")
+    
+    Returns:
+        Tuple of (nodes_dict, nodes_graph, matrix)
+    """
+    import random
+    
+    nodes = {}
+    nodes_graph = {}
+    
+    # Determine role based on federation type
+    # CFL: Centralized FL - one server, rest trainers
+    # SFL: Semi-decentralized FL - one aggregator, rest trainers
+    # DFL: Decentralized FL - all are trainer_aggregators
+    
+    for i in range(n_nodes):
+        node_id = str(i)
+        
+        # Assign role based on federation and topology
+        if federation == "CFL":
+            role = "server" if i == 0 else "trainer"
+        elif federation == "SFL":
+            role = "aggregator" if i == 0 else "trainer"
+        else:  # DFL
+            role = "trainer_aggregator"
+        
+        nodes[node_id] = {
+            "id": node_id,
+            "ip": "127.0.0.1",
+            "port": str(45000 + i),
+            "role": role,
+            "malicious": False,
+            "proxy": False,
+            "start": (i == 0),  # First node starts
+            "neighbors": [],
+            "links": [],
+        }
+        nodes_graph[node_id] = {
+            "id": node_id,
+            "role": role,
+            "malicious": False,
+            "proxy": False,
+            "start": (i == 0),
+        }
+    
+    # Generate links based on topology
+    links = []
+    if topology == "Fully":
+        for i in range(n_nodes):
+            for j in range(i + 1, n_nodes):
+                links.append((i, j))
+    elif topology == "Ring":
+        for i in range(n_nodes):
+            links.append((i, (i + 1) % n_nodes))
+    elif topology == "Star":
+        for i in range(1, n_nodes):
+            links.append((0, i))
+    elif topology == "Random":
+        # Random topology with ~30% connection probability
+        for i in range(n_nodes):
+            for j in range(i + 1, n_nodes):
+                if random.random() < 0.3:
+                    links.append((i, j))
+    
+    # Update neighbors based on links
+    for source, target in links:
+        source_id = str(source)
+        target_id = str(target)
+        
+        # Add to neighbors (bidirectional)
+        if target_id not in nodes[source_id]["neighbors"]:
+            nodes[source_id]["neighbors"].append(target_id)
+        if source_id not in nodes[target_id]["neighbors"]:
+            nodes[target_id]["neighbors"].append(source_id)
+        
+        # Add to links
+        nodes[source_id]["links"].append({"source": source, "target": target})
+    
+    # Generate adjacency matrix
+    matrix = [[0] * n_nodes for _ in range(n_nodes)]
+    for source, target in links:
+        matrix[source][target] = 1
+        matrix[target][source] = 1  # Bidirectional
+    
+    return nodes, nodes_graph, matrix
+
+
+# =============================================================================
 # EXPERIMENT BUILDER
 # =============================================================================
 
@@ -354,6 +454,13 @@ def build_scenario_from_config(config: dict) -> dict:
     
     This creates the full scenario data structure expected by the NEBULA frontend.
     """
+    # Generate topology
+    n_nodes = config.get("n_nodes", 20)
+    topology = config.get("topology", "Ring")
+    federation = config.get("federation", "DFL")
+    
+    nodes, nodes_graph, matrix = generate_topology(n_nodes, topology, federation)
+    
     scenario = {
         # Metadata
         "scenario_title": config.get("scenario_title", "Experiment"),
@@ -361,14 +468,14 @@ def build_scenario_from_config(config: dict) -> dict:
         
         # Deployment
         "deployment": config.get("deployment", "process"),
-        "federation": config.get("federation", "DFL"),
+        "federation": federation,
         
         # Topology
-        "topology": config.get("topology", "Ring"),
-        "n_nodes": config.get("n_nodes", 20),
-        "nodes": {},
-        "nodes_graph": {},
-        "matrix": [],
+        "topology": topology,
+        "n_nodes": n_nodes,
+        "nodes": nodes,
+        "nodes_graph": nodes_graph,
+        "matrix": matrix,
         
         # Dataset
         "dataset": config.get("dataset", "CIFAR10"),
