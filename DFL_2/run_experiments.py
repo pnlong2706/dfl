@@ -333,8 +333,8 @@ def main():
     )
     parser.add_argument(
         "--base-url",
-        default="http://localhost:18000",
-        help="NEBULA base URL (default: http://localhost:18000)"
+        default="http://localhost:6060",
+        help="NEBULA base URL (default: http://localhost:6060)"
     )
     parser.add_argument(
         "--username",
