@@ -5,7 +5,9 @@ Script to run DFL experiments consecutively via the NEBULA API.
 This script:
 1. Loads experiment JSON files from the experiments directory
 2. Filters experiments with 0% Byzantine attack
-3. Runs them consecutively using the NEBULA API
+3. Skips experiments that are already in the completed list
+4. Runs them consecutively using the NEBULA API
+5. Updates the completed list after each successful run
 
 Usage:
     python3 run_experiments.py [--experiments-dir ./experiments] [--base-url http://localhost:18000]
@@ -17,10 +19,14 @@ import logging
 import os
 import sys
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 
-import requests
-from requests.exceptions import RequestException
+try:
+    import requests
+    from requests.exceptions import RequestException
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(
@@ -29,6 +35,122 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
+
+# Default completed experiments file
+COMPLETED_FILE = "completed_experiments.txt"
+
+
+def load_completed_experiments(completed_file: str) -> Set[str]:
+    """
+    Load the set of completed experiment filenames.
+    
+    Args:
+        completed_file: Path to the completed experiments file
+        
+    Returns:
+        Set of completed experiment filenames
+    """
+    completed = set()
+    
+    if not os.path.exists(completed_file):
+        return completed
+    
+    with open(completed_file, 'r') as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            completed.add(line)
+    
+    return completed
+
+
+def save_completed_experiment(completed_file: str, filename: str) -> None:
+    """
+    Append a completed experiment to the completed file.
+    
+    Args:
+        completed_file: Path to the completed experiments file
+        filename: Experiment filename to add
+    """
+    with open(completed_file, 'a') as f:
+        f.write(f"{filename}\n")
+    logger.info(f"Added {filename} to completed list")
+
+
+def load_experiments(
+    experiments_dir: str, 
+    byzantine_filter: Optional[int] = None,
+    completed: Set[str] = None,
+    skip_completed: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    Load experiment JSON files from directory.
+    
+    Args:
+        experiments_dir: Path to experiments directory
+        byzantine_filter: If set, only load experiments with this Byzantine percentage
+        completed: Set of completed experiment filenames to skip
+        skip_completed: Whether to skip completed experiments
+        
+    Returns:
+        List of experiment data dictionaries
+    """
+    experiments = []
+    skipped = []
+    
+    if completed is None:
+        completed = set()
+    
+    if not os.path.exists(experiments_dir):
+        logger.error(f"Experiments directory not found: {experiments_dir}")
+        return experiments
+    
+    for filename in sorted(os.listdir(experiments_dir)):
+        if not filename.endswith('.json'):
+            continue
+        
+        # Skip completed experiments
+        if skip_completed and filename in completed:
+            skipped.append(filename)
+            continue
+        
+        filepath = os.path.join(experiments_dir, filename)
+        
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+                
+            # The JSON is a list with one scenario
+            if isinstance(data, list) and len(data) > 0:
+                scenario = data[0]
+            else:
+                scenario = data
+            
+            # Filter by Byzantine percentage if specified
+            if byzantine_filter is not None:
+                byzantine_pct = scenario.get('attack_params', {}).get('poisoned_node_percent', 0)
+                if byzantine_pct != byzantine_filter:
+                    continue
+            
+            experiments.append({
+                'filename': filename,
+                'filepath': filepath,
+                'scenario': scenario,
+                'title': scenario.get('scenario_title', 'Unknown'),
+                'byzantine_pct': scenario.get('attack_params', {}).get('poisoned_node_percent', 0),
+            })
+            
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"Error loading {filename}: {e}")
+    
+    if skipped:
+        logger.info(f"Skipping {len(skipped)} completed experiments")
+        for f in skipped:
+            logger.debug(f"  Skipped: {f}")
+    
+    return experiments
 
 
 class NebulaClient:
@@ -187,62 +309,10 @@ class NebulaClient:
         return False
 
 
-def load_experiments(experiments_dir: str, byzantine_filter: Optional[int] = None) -> List[Dict[str, Any]]:
-    """
-    Load experiment JSON files from directory.
-    
-    Args:
-        experiments_dir: Path to experiments directory
-        byzantine_filter: If set, only load experiments with this Byzantine percentage
-        
-    Returns:
-        List of experiment data dictionaries
-    """
-    experiments = []
-    
-    if not os.path.exists(experiments_dir):
-        logger.error(f"Experiments directory not found: {experiments_dir}")
-        return experiments
-    
-    for filename in sorted(os.listdir(experiments_dir)):
-        if not filename.endswith('.json'):
-            continue
-        
-        filepath = os.path.join(experiments_dir, filename)
-        
-        try:
-            with open(filepath, 'r') as f:
-                data = json.load(f)
-                
-            # The JSON is a list with one scenario
-            if isinstance(data, list) and len(data) > 0:
-                scenario = data[0]
-            else:
-                scenario = data
-            
-            # Filter by Byzantine percentage if specified
-            if byzantine_filter is not None:
-                byzantine_pct = scenario.get('attack_params', {}).get('poisoned_node_percent', 0)
-                if byzantine_pct != byzantine_filter:
-                    continue
-            
-            experiments.append({
-                'filename': filename,
-                'filepath': filepath,
-                'scenario': scenario,
-                'title': scenario.get('scenario_title', 'Unknown'),
-                'byzantine_pct': scenario.get('attack_params', {}).get('poisoned_node_percent', 0),
-            })
-            
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.warning(f"Error loading {filename}: {e}")
-    
-    return experiments
-
-
 def run_experiments_consecutively(
     client: NebulaClient,
     experiments: List[Dict[str, Any]],
+    completed_file: str,
     wait_for_completion: bool = True,
     poll_interval: int = 30,
     timeout: int = 3600,
@@ -254,6 +324,7 @@ def run_experiments_consecutively(
     Args:
         client: NebulaClient instance
         experiments: List of experiment dictionaries
+        completed_file: Path to completed experiments file
         wait_for_completion: Whether to wait for each scenario to complete
         poll_interval: Seconds between status checks
         timeout: Maximum seconds to wait per scenario
@@ -312,11 +383,22 @@ def run_experiments_consecutively(
                     'filename': exp['filename'],
                     'status': 'completed',
                 })
+                
+                # Add to completed file
+                save_completed_experiment(completed_file, exp['filename'])
             
             # Wait before next scenario
             if i < len(experiments):
                 logger.info(f"Waiting {delay_between}s before next scenario...")
                 time.sleep(delay_between)
+        else:
+            # If not waiting, mark as success immediately
+            save_completed_experiment(completed_file, exp['filename'])
+            results['details'].append({
+                'title': exp['title'],
+                'filename': exp['filename'],
+                'status': 'deployed',
+            })
         
         print()
     
@@ -353,6 +435,16 @@ def main():
         help="Filter experiments by Byzantine percentage (default: 0)"
     )
     parser.add_argument(
+        "--completed-file",
+        default=None,
+        help="File to track completed experiments (default: completed_experiments.txt)"
+    )
+    parser.add_argument(
+        "--include-completed",
+        action="store_true",
+        help="Include experiments that are already in the completed list"
+    )
+    parser.add_argument(
         "--no-wait",
         action="store_true",
         help="Don't wait for scenarios to complete"
@@ -383,13 +475,24 @@ def main():
     
     args = parser.parse_args()
     
-    # Get absolute path to experiments directory
+    # Get absolute paths
     script_dir = os.path.dirname(os.path.abspath(__file__))
     experiments_dir = os.path.join(script_dir, args.experiments_dir)
+    
+    if args.completed_file:
+        completed_file = args.completed_file
+    else:
+        completed_file = os.path.join(script_dir, COMPLETED_FILE)
     
     print("=" * 60)
     print("NEBULA DFL EXPERIMENT RUNNER")
     print("=" * 60)
+    print()
+    
+    # Load completed experiments
+    logger.info(f"Loading completed experiments from: {completed_file}")
+    completed = load_completed_experiments(completed_file)
+    logger.info(f"Found {len(completed)} completed experiments")
     print()
     
     # Load experiments
@@ -397,13 +500,20 @@ def main():
     logger.info(f"Filtering by Byzantine percentage: {args.byzantine}%")
     print()
     
-    experiments = load_experiments(experiments_dir, args.byzantine)
+    experiments = load_experiments(
+        experiments_dir, 
+        args.byzantine,
+        completed,
+        skip_completed=not args.include_completed,
+    )
     
     if not experiments:
-        logger.error("No experiments found matching criteria")
-        sys.exit(1)
+        logger.info("No experiments found matching criteria")
+        if completed and not args.include_completed:
+            logger.info(f"  ({len(completed)} experiments already completed)")
+        return
     
-    logger.info(f"Found {len(experiments)} experiments:")
+    logger.info(f"Found {len(experiments)} experiments to run:")
     for i, exp in enumerate(experiments, 1):
         print(f"  {i}. {exp['title']} (Byzantine: {exp['byzantine_pct']}%)")
     print()
@@ -412,6 +522,11 @@ def main():
     if args.list_only:
         logger.info("List-only mode, exiting")
         return
+    
+    # Check if requests is available
+    if not REQUESTS_AVAILABLE:
+        logger.error("The 'requests' module is required. Install it with: pip install requests")
+        sys.exit(1)
     
     # Initialize client
     client = NebulaClient(args.base_url, args.username, args.password)
@@ -436,6 +551,7 @@ def main():
     results = run_experiments_consecutively(
         client,
         experiments,
+        completed_file,
         wait_for_completion=not args.no_wait,
         poll_interval=args.poll_interval,
         timeout=args.timeout,
@@ -456,7 +572,7 @@ def main():
     if results['details']:
         print("Details:")
         for detail in results['details']:
-            status_icon = "✓" if detail['status'] == 'completed' else "✗"
+            status_icon = "✓" if detail['status'] in ['completed', 'deployed'] else "✗"
             print(f"  {status_icon} {detail['title']}: {detail['status']}")
 
 
