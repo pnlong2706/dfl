@@ -1,0 +1,108 @@
+															
+	DFL Experiment														
+															
+	For model: Using SimpleNet for CIFAR10/100, CNN for MNIST.					mid-round-testing = false		Note: For pseudo running, always enable Pseudo option in Nebula	Note: Random topo will have random probability 0.2						
+	Default: 100 rounds, 2 epochs/round, 20 nodes.					pcr-apply-mode = all_round		Note: For normal running,  enable mid-round testing in Nebula if comparing againt Pseu							
+															
+	Dataset	Data distribution	Topology	Aggregation	Status	Byzantine percentage	Attack	Defense	Note	Port	Scenario title	ID	Legend	Figure link	Figure_id
+	CIFAR 10	Dir(0.3)	Ring	DFedAvg	Finish	0%	None	None	dfl/	6060	Exp 1.1	nebula_DFL_2026_03_22_18_05_48			
+				DFedAvg + PCR	Finish	0%	None	None	dfl/	6060	Cifar 10 (0.03) DFedAvg + PCR Ring	nebula_DFL_2026_03_24_15_51_59			
+				Pseu DFedAvg + PCR	Pending	0%	None	None			Cifar 10 (0.03) Pseu DFedAvg + PCR Ring				
+				DFedSAM	Pending	0%	None	None			Cifar10 (0.3) DFedSAM Ring				
+				DFedSam + PCR	Pending	0%	None	None			Cifar10 (0.3) DFedSam + PCR Ring				
+															
+	CIFAR 10	Dir(0.05)	Ring	DFedAvg	Finish	0%	None	None	dfl/	6060	Cifar10 (0.05) DFedAvg Ring	nebula_DFL_2026_03_23_04_39_36			
+				DFedAvg + PCR	Finish	0%	None	None	dfl_clone/	6062	Cifar10 (0.05) DFedAvg + PCR Ring	nebula_DFL_2026_03_23_05_44_54 / nebula_DFL_2026_03_23_09_05_48 (0.075)			
+				Pseu DFedAvg + PCR	Finish	0%	None	None	dfl_clone/	6062	Cifar10 (0.05) Pseu DFedAvg + PCR Ring	nebula_DFL_2026_03_23_17_16_22			
+				DFedSAM	Pending	0%	None	None			Cifar10 (0.05) DFedSam Ring				
+				DFedSam + PCR	Pending	0%	None	None			Cifar10 (0.05) DFedSam + PCR Ring				
+															
+	CIFAR 100	Dir(0.3)	Ring	DFedAvg	Pending	0%	None	None			Cifar100 (0.3) DFedAvg Ring				
+				DFedAvg + PCR	Pending	0%	None	None			Cifar100 (0.3) DFedAvg + PCR Ring				
+				Pseu DFedAvg + PCR	Pending	0%	None	None			Cifar100 (0.3) Pseu DFedAvg + PCR Ring				
+				DFedSAM	Pending	0%	None	None			Cifar100 (0.3) DFedSAM Ring				
+				DFedSam + PCR	Pending	0%	None	None			Cifar100 (0.3) DFedSam + PCR Ring				
+															
+	CIFAR 100	Dir(0.05)	Ring	DFedAvg	Pending	0%	None	None			Cifar100 (0.05) DFedAvg Ring				
+				DFedAvg + PCR	Running	0%	None	None	dfl_clone/	6062	Cifar100 (0.05) DFedAvg + PCR Ring	nebula_DFL_2026_03_23_08_46_28			
+				Pseu DFedAvg + PCR	Pending	0%	None	None			Cifar100 (0.05) Pseu DFedAvg + PCR Ring				
+				DFedSAM	Pending	0%	None	None			Cifar100 (0.05) DFedSAM Ring				
+				DFedSam + PCR	Pending	0%	None	None			Cifar100 (0.05) DFedSam + PCR Ring				
+															
+	CIFAR 10	Dir(0.05)	Random	DFedAvg	Pending	0%	None	None			Cifar10 (0.05) DFedAvg Random				
+				DFedAvg + PCR	Pending	0%	None	None			Cifar10 (0.05) DFedAvg + PCR Random				
+				Pseu DFedAvg + PCR	Pending	0%	None	None			Cifar10 (0.05) Pseu DFedAvg + PCR Random				
+															
+															
+															
+															
+															
+															
+															
+															
+															
+															
+	Dataset	Data distribution	Topology	Aggregation	Status	Byzantine percentage	Attack	Defense	Note	Port	Scenario title	ID	Legend	Figure link	Figure_id
+	MNIST	Dir(0.3)	Ring	DFedAvg	Pending	10%	Label Flipping	PRT			MNIST (0.3) DFedAvg Ring				
+					Pending			BALANCE			MNIST (0.3) DFedAvg Ring Label Flipping BALANCE				
+					Pending			RTC			MNIST (0.3) DFedAvg Ring Label Flipping RTC				
+					Pending			None			MNIST (0.3) DFedAvg Ring Label Flipping				
+					Pending			SCCLIP			MNIST (0.3) DFedAvg Ring Label Flipping SCCLIP				
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg	Pending	10%	Gaussian Model Posoining	PRT			MNIST (0.3) DFedAvg Ring				
+					Pending			BALANCE			MNIST (0.3) DFedAvg Ring Gaussian Model Posoining BALANCE				
+					Pending			RTC			MNIST (0.3) DFedAvg Ring Gaussian Model Posoining RTC				
+					Pending			None			MNIST (0.3) DFedAvg Ring Gaussian Model Posoining				
+					Pending			SCCLIP			MNIST (0.3) DFedAvg Ring Gaussian Model Posoining SCCLIP				
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg	Pending	10%	Trim Model Poisoning	PRT			MNIST (0.3) DFedAvg Ring				
+					Pending			BALANCE			MNIST (0.3) DFedAvg Ring Trim Model Poisoning BALANCE				
+					Pending			RTC			MNIST (0.3) DFedAvg Ring Trim Model Poisoning RTC				
+					Pending			None			MNIST (0.3) DFedAvg Ring Trim Model Poisoning				
+					Pending			SCCLIP			MNIST (0.3) DFedAvg Ring Trim Model Poisoning SCCLIP				
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg	Pending	10%	Krum Model Poisoning	PRT			MNIST (0.3) DFedAvg Ring				
+					Pending			BALANCE			MNIST (0.3) DFedAvg Ring Krum Model Poisoning BALANCE				
+					Pending			RTC			MNIST (0.3) DFedAvg Ring Krum Model Poisoning RTC				
+					Pending			None			MNIST (0.3) DFedAvg Ring Krum Model Poisoning				
+					Pending			SCCLIP			MNIST (0.3) DFedAvg Ring Krum Model Poisoning SCCLIP				
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg	Pending	10%	ALIE	PRT			MNIST (0.3) DFedAvg Ring				
+					Pending			BALANCE			MNIST (0.3) DFedAvg Ring ALIE BALANCE				
+					Pending			RTC			MNIST (0.3) DFedAvg Ring ALIE RTC				
+					Pending			None			MNIST (0.3) DFedAvg Ring ALIE				
+					Pending			SCCLIP			MNIST (0.3) DFedAvg Ring ALIE SCCLIP				
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg	Pending	10%	DISSENSUS	PRT			MNIST (0.3) DFedAvg Ring				
+					Pending			BALANCE			MNIST (0.3) DFedAvg Ring DISSENSUS BALANCE				
+					Pending			RTC			MNIST (0.3) DFedAvg Ring DISSENSUS RTC				
+					Pending			None			MNIST (0.3) DFedAvg Ring DISSENSUS				
+					Pending			SCCLIP			MNIST (0.3) DFedAvg Ring DISSENSUS SCCLIP				
+															
+	MNIST	Dir(0.3)	Ring	DFedAvg	Pending	20%	DISSENSUS	PRT			MNIST (0.3) DFedAvg Ring				
+					Pending			BALANCE			MNIST (0.3) DFedAvg Ring DISSENSUS BALANCE				
+					Pending			RTC			MNIST (0.3) DFedAvg Ring DISSENSUS RTC				
+					Pending			None			MNIST (0.3) DFedAvg Ring DISSENSUS				
+					Pending			SCCLIP			MNIST (0.3) DFedAvg Ring DISSENSUS SCCLIP				
+															
+	CIFAR 10	Dir(0.3)	Ring	DFedAvg	Pending	20%	DISSENSUS	PRT			Cifar10 (0.3) DFedAvg Ring				
+					Pending			BALANCE			Cifar10 (0.3) DFedAvg Ring DISSENSUS BALANCE				
+					Pending			RTC			Cifar10 (0.3) DFedAvg Ring DISSENSUS RTC				
+					Pending			None			Cifar10 (0.3) DFedAvg Ring DISSENSUS				
+					Pending			SCCLIP			Cifar10 (0.3) DFedAvg Ring DISSENSUS SCCLIP				
+															
+															
+															
+															
+	Dataset	Data distribution	Topology	Aggregation	Status	Byzantine percentage	Attack	Defense	Note	Port	Scenario title	ID	Legend	Figure link	Figure_id
+	MNIST	Dir(0.05)	Ring	DFedAvg + PCR		10%	DISSENSUS	PRT			MNIST (0.05) DFedAvg + PCR Ring				
+				DFedAvg				PRT			MNIST (0.05) DFedAvg Ring				
+				DFedAvg				None			MNIST (0.05) DFedAvg Ring				
+				DFedAvg				RTC			MNIST (0.05) DFedAvg Ring				
+				DFedAvg + PCR				RTC			MNIST (0.05) DFedAvg + PCR Ring				
+															
+	CIFAR 10	Dir(0.05)	Ring	DFedAvg + PCR		10%	DISSENSUS	PRT			Cifar10 (0.05) DFedAvg + PCR Ring				
+				DFedAvg				PRT			Cifar10 (0.05) DFedAvg Ring				
+				DFedAvg				None			Cifar10 (0.05) DFedAvg Ring				
+				DFedAvg				RTC			Cifar10 (0.05) DFedAvg Ring				
+				DFedAvg + PCR				RTC			Cifar10 (0.05) DFedAvg + PCR Ring				
