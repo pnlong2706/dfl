@@ -6,7 +6,6 @@
 # Experiments with "Finish" status from Experiment.tsv
 001_Exp_11.json
 002_Cifar_10_003_DFedAvg_PCR_Ring.json
-003_Cifar_10_003_Pseu_DFedAvg_PCR_Ring.json
 006_Cifar10_005_DFedAvg_Ring.json
 007_Cifar10_005_DFedAvg_PCR_Ring.json
 008_Cifar10_005_Pseu_DFedAvg_PCR_Ring.json
