@@ -199,6 +199,9 @@ class DFLUpdateHandler(UpdateHandler):
 
                 # Update EMA if pseudo aggregation is enabled (for actual aggregation rounds)
                 if self._pseudo_agg_enabled:
+                    # Compute PRT trust BEFORE update_ema (which overwrites _old_models)
+                    if self._prt_enabled and source in self._old_models and source in self._ema_deltas:
+                        self.compute_prt_trust(source, model, round)
                     self._old_model_rounds[source] = round  # Track round when model was received
                     self.update_ema(source, model)
 
@@ -244,7 +247,13 @@ class DFLUpdateHandler(UpdateHandler):
             else:
                 last_updt_received = updt
                 self.us[sr] = (last_updt_received, source_historic)  # Update storage with new last update used
-            updates[sr] = (updt.model, updt.weight)
+            # Apply PRT trust to weight for real rounds
+            weight = updt.weight
+            if self._prt_enabled and sr in self._prt_trust_scores:
+                trust = self._prt_trust_scores[sr]
+                weight = weight * trust
+                logging.info(f"PRT weight adjustment | neighbor={sr} | original={updt.weight:.2f} | trust={trust:.4f} | effective={weight:.2f}")
+            updates[sr] = (updt.model, weight)
 
         await self._updates_storage_lock.release_async()
         return updates
@@ -614,6 +623,12 @@ class DFLUpdateHandler(UpdateHandler):
                     f"Neighbor {neighbor_id}: model from round {model_round} (diff={round_diff}), "
                     f"weight adjusted: {base_weight:.2f} / {staleness_penalty} = {adjusted_weight:.2f}"
                 )
+
+            # Apply PRT trust to pseudo round weights
+            if self._prt_enabled and self._prt_apply_to_pseudo and neighbor_id in self._prt_trust_scores:
+                trust = self._prt_trust_scores[neighbor_id]
+                adjusted_weight *= trust
+                logging.info(f"PRT pseudo weight | neighbor={neighbor_id} | trust={trust:.4f} | final_weight={adjusted_weight:.2f}")
 
             predicted_models[neighbor_id] = (predicted_model, adjusted_weight)
 
