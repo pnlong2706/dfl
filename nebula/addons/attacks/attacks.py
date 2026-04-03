@@ -117,6 +117,10 @@ def create_attack(engine) -> Attack:
     from nebula.addons.attacks.model.gllneuroninversion import GLLNeuronInversionAttack
     from nebula.addons.attacks.model.modelpoison import ModelPoisonAttack
     from nebula.addons.attacks.model.swappingweights import SwappingWeightsAttack
+    from nebula.addons.attacks.model.alieattack import ALIEAttack
+    from nebula.addons.attacks.model.trimattack import TrimModelPoisoningAttack
+    from nebula.addons.attacks.model.krumattack import KrumModelPoisoningAttack
+    from nebula.addons.attacks.model.dissensusattack import DissensusAttack
 
     ATTACK_MAP = {
         "GLL Neuron Inversion": GLLNeuronInversionAttack,
@@ -126,6 +130,10 @@ def create_attack(engine) -> Attack:
         "Label Flipping": LabelFlippingAttack,
         "Sample Poisoning": SamplePoisoningAttack,
         "Model Poisoning": ModelPoisonAttack,
+        "ALIE": ALIEAttack,
+        "Trim Attack": TrimModelPoisoningAttack,
+        "Krum Attack": KrumModelPoisoningAttack,
+        "Dissensus": DissensusAttack,
     }
 
     # Get attack name and parameters from the engine configuration
