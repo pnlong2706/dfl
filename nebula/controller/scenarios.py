@@ -114,6 +114,12 @@ class Scenario:
         sar_training,
         sar_training_policy,
         physical_ips=None,
+        tau=10.0,
+        rtc_b=1,
+        balance_alpha=0.5,
+        balance_gamma=0.3,
+        balance_kappa=1.0,
+        **kwargs,
     ):
         """
         Initialize a Scenario instance.
@@ -187,6 +193,11 @@ class Scenario:
         self.fedsam = fedsam if fedsam else {"enabled": False, "rho": 0.5}
         self.pcr = pcr if pcr else {"enabled": False, "mu": 0.01, "apply_mode": "pseudo_only"}
         self.prt = prt if prt else {"enabled": False, "score_type": "exponential", "scale": 1.0, "min_trust": 0.1, "trust_smoothing": 0.5, "warmup_rounds": 2, "apply_to_pseudo": True}
+        self.tau = float(tau) if tau else 10.0
+        self.rtc_b = int(rtc_b) if rtc_b else 1
+        self.balance_alpha = float(balance_alpha) if balance_alpha else 0.5
+        self.balance_gamma = float(balance_gamma) if balance_gamma else 0.3
+        self.balance_kappa = float(balance_kappa) if balance_kappa else 1.0
         self.mid_round_test = mid_round_test if mid_round_test is not None else False
         self.rounds = rounds
         self.logginglevel = logginglevel
@@ -710,6 +721,11 @@ class ScenarioManagement:
             participant_config["aggregator_args"]["algorithm"] = self.scenario.agg_algorithm
             participant_config["aggregator_args"]["pseudo_aggregation"] = self.scenario.pseudo_aggregation
             participant_config["aggregator_args"]["prt"] = self.scenario.prt
+            participant_config["aggregator_args"]["tau"] = self.scenario.tau
+            participant_config["aggregator_args"]["rtc_b"] = self.scenario.rtc_b
+            participant_config["aggregator_args"]["balance_alpha"] = self.scenario.balance_alpha
+            participant_config["aggregator_args"]["balance_gamma"] = self.scenario.balance_gamma
+            participant_config["aggregator_args"]["balance_kappa"] = self.scenario.balance_kappa
             # To be sure that benign nodes have no attack parameters
             if node_config["role"] == "malicious":
                 participant_config["adversarial_args"]["fake_behavior"] = node_config["fake_behavior"]

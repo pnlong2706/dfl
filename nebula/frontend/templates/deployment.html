@@ -457,8 +457,41 @@
                             <option>Krum</option>
                             <option>TrimmedMean</option>
                             <option>Median</option>
+                            <option>SCClip</option>
+                            <option>RTC</option>
+                            <option>Balance</option>
                         </select>
                     </div>
+                    <!-- Aggregator-specific parameters -->
+                    <div id="aggParamsTau" style="display: none; margin-left: 23px; margin-top: 10px;">
+                        <h5 class="step-title" style="font-size: 14px;">Clipping Radius (τ)</h5>
+                        <input type="number" class="form-control" id="aggTau" min="0.1" max="1000" step="0.5" value="10.0"
+                            style="display:inline; width: 30%">
+                    </div>
+                    <div id="aggParamsRtcB" style="display: none; margin-left: 23px; margin-top: 10px;">
+                        <h5 class="step-title" style="font-size: 14px;">Byzantine Count Estimate (b)</h5>
+                        <input type="number" class="form-control" id="aggRtcB" min="0" max="50" step="1" value="1"
+                            style="display:inline; width: 30%">
+                    </div>
+                    <div id="aggParamsBalance" style="display: none; margin-left: 23px; margin-top: 10px;">
+                        <h5 class="step-title" style="font-size: 14px;">Self-trust Weight (α)</h5>
+                        <input type="number" class="form-control" id="aggBalanceAlpha" min="0" max="1" step="0.05" value="0.5"
+                            style="display:inline; width: 30%">
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 10px;">Base Threshold (γ)</h5>
+                        <input type="number" class="form-control" id="aggBalanceGamma" min="0.01" max="10" step="0.05" value="0.3"
+                            style="display:inline; width: 30%">
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 10px;">Decay Rate (κ)</h5>
+                        <input type="number" class="form-control" id="aggBalanceKappa" min="0" max="10" step="0.1" value="1.0"
+                            style="display:inline; width: 30%">
+                    </div>
+                    <script>
+                        document.getElementById('aggregationSelect').addEventListener('change', function() {
+                            var val = this.value;
+                            document.getElementById('aggParamsTau').style.display = (val === 'SCClip' || val === 'RTC') ? 'block' : 'none';
+                            document.getElementById('aggParamsRtcB').style.display = (val === 'RTC') ? 'block' : 'none';
+                            document.getElementById('aggParamsBalance').style.display = (val === 'Balance') ? 'block' : 'none';
+                        });
+                    </script>
                     <h5 class="step-title">Pseudo Aggregation (Reduce Communication by 50%)</h5>
                     <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 15px;">
                         <input class="form-check-input" type="checkbox" id="pseudoAggSwitch"

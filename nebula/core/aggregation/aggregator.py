@@ -225,12 +225,18 @@ def create_aggregator(config, engine) -> Aggregator:
     from nebula.core.aggregation.krum import Krum
     from nebula.core.aggregation.median import Median
     from nebula.core.aggregation.trimmedmean import TrimmedMean
+    from nebula.core.aggregation.scclip import SCClip
+    from nebula.core.aggregation.rtc import RTC
+    from nebula.core.aggregation.balance import Balance
 
     ALGORITHM_MAP = {
         "FedAvg": FedAvg,
         "Krum": Krum,
         "Median": Median,
         "TrimmedMean": TrimmedMean,
+        "SCClip": SCClip,
+        "RTC": RTC,
+        "Balance": Balance,
     }
     algorithm = config.participant["aggregator_args"]["algorithm"]
     aggregator = ALGORITHM_MAP.get(algorithm)
