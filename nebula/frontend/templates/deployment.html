@@ -543,6 +543,43 @@
                         </small>
                     </div>
 
+                    <h5 class="step-title" style="margin-top: 20px;">PRT (Prediction-Residual Trust)</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 15px;">
+                        <input class="form-check-input" type="checkbox" id="prtSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                        <label class="form-check-label" for="prtSwitch" style="margin-left: 10px; font-size: 14px;">
+                            Enable PRT
+                        </label>
+                    </div>
+                    <div id="prtSettings" style="display: none; margin-left: 23px; margin-top: 10px;">
+                        <h5 class="step-title" style="font-size: 14px;">Score Type</h5>
+                        <select class="form-control" id="prtScoreType" style="display:inline; width: 30%">
+                            <option value="exponential" selected>Exponential</option>
+                            <option value="inverse">Inverse</option>
+                        </select>
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 15px;">Scale</h5>
+                        <input type="number" class="form-control" id="prtScale" min="0.01" max="100" step="0.1" value="1.0"
+                            style="display:inline; width: 30%">
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 15px;">Minimum Trust</h5>
+                        <input type="number" class="form-control" id="prtMinTrust" min="0" max="1" step="0.01" value="0.1"
+                            style="display:inline; width: 30%">
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 15px;">Trust Smoothing (EMA)</h5>
+                        <input type="number" class="form-control" id="prtTrustSmoothing" min="0" max="1" step="0.05" value="0.5"
+                            style="display:inline; width: 30%">
+                        <h5 class="step-title" style="font-size: 14px; margin-top: 15px;">Warmup Rounds</h5>
+                        <input type="number" class="form-control" id="prtWarmupRounds" min="0" max="100" step="1" value="2"
+                            style="display:inline; width: 30%">
+                        <div class="form-check" style="margin-top: 15px;">
+                            <input class="form-check-input" type="checkbox" id="prtApplyToPseudo" checked>
+                            <label class="form-check-label" for="prtApplyToPseudo">Apply trust to pseudo rounds</label>
+                        </div>
+                        <small class="form-text text-muted" style="display: block; margin-top: 5px;">
+                            <strong>Purpose:</strong> Byzantine defense using prediction residuals from Pseudo Aggregation<br>
+                            <strong>Requires:</strong> Pseudo Aggregation must be enabled<br>
+                            <strong>Trust formula:</strong> trust = exp(-scale * ||actual - predicted||_rms), EMA-smoothed across rounds
+                        </small>
+                    </div>
+
                     <h5 class="step-title" style="margin-top: 20px;">Mid-Round Testing (Balance Computation Time)</h5>
                     <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 15px;">
                         <input class="form-check-input" type="checkbox" id="midRoundTestSwitch"

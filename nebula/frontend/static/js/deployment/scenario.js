@@ -74,6 +74,7 @@ const ScenarioManager = (function() {
             pseudo_aggregation: window.PseudoAggManager.getSettings(),
             fedsam: window.FedSAMManager.getSettings(),
             pcr: window.PCRManager.getSettings(),
+            prt: window.PRTManager.getSettings(),
             mid_round_test: window.MidRoundTestManager.isEnabled(),
             logginglevel: document.getElementById("loggingLevel").value === "true",
             report_status_data_queue: document.getElementById("reportingSwitch").checked,
@@ -252,6 +253,9 @@ const ScenarioManager = (function() {
         if (scenario.pcr) {
             window.PCRManager.setSettings(scenario.pcr);
         }
+        if (scenario.prt) {
+            window.PRTManager.setSettings(scenario.prt);
+        }
 
         // Trigger necessary events
         document.getElementById("federationArchitecture").dispatchEvent(new Event('change'));
@@ -358,6 +362,9 @@ const ScenarioManager = (function() {
         }
         if (window.PCRManager) {
             window.PCRManager.reset();
+        }
+        if (window.PRTManager) {
+            window.PRTManager.reset();
         }
 
         // Trigger necessary events

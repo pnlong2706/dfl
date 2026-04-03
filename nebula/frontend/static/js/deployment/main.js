@@ -12,6 +12,7 @@ import PseudoAggManager from './pseudo-agg.js';
 import FedSAMManager from './fedsam-manager.js';
 import MidRoundTestManager from './mid-round-test.js';
 import PCRManager from './pcr-manager.js';
+import PRTManager from './prt-manager.js';
 
 const DeploymentManager = (function() {
     function initialize() {
@@ -40,6 +41,7 @@ const DeploymentManager = (function() {
         FedSAMManager.initialize();
         MidRoundTestManager.initialize();
         PCRManager.initialize();
+        PRTManager.initialize();
 
         // Make modules globally available
         window.ScenarioManager = ScenarioManager;
@@ -54,6 +56,7 @@ const DeploymentManager = (function() {
         window.PseudoAggManager = PseudoAggManager;
         window.FedSAMManager = FedSAMManager;
         window.PCRManager = PCRManager;
+        window.PRTManager = PRTManager;
         window.DeploymentManager = DeploymentManager;
         window.Utils = Utils;
     }
