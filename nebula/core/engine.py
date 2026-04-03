@@ -133,6 +133,11 @@ class Engine:
         self._pcr_apply_mode = config.participant.get("training_args", {}).get("pcr", {}).get("apply_mode", "pseudo_only")
         logging.info(f"PCR enabled = {self._pcr_enabled}, mu = {self._pcr_mu}, apply_mode = {self._pcr_apply_mode}")
 
+        # PRT (Prediction-Residual Trust) configuration
+        self._prt_config = config.participant.get("aggregator_args", {}).get("prt", {})
+        self._prt_enabled = self._prt_config.get("enabled", False)
+        logging.info(f"PRT enabled = {self._prt_enabled}")
+
         self.security = security
 
         self._trainer = trainer(model, datamodule, config=self.config)
@@ -702,6 +707,20 @@ class Engine:
                 weight_schedule_step=self._pseudo_agg_weight_schedule_step,
                 stop_pseudo_round=self._pseudo_agg_stop_pseudo_round
             )
+
+        # Enable PRT in update handler if configured (requires pseudo agg)
+        if self._prt_enabled and self._pseudo_agg_enabled:
+            self.aggregator.us.enable_prt(
+                score_type=self._prt_config.get("score_type", "exponential"),
+                scale=self._prt_config.get("scale", 1.0),
+                min_trust=self._prt_config.get("min_trust", 0.1),
+                trust_smoothing=self._prt_config.get("trust_smoothing", 0.5),
+                warmup_rounds=self._prt_config.get("warmup_rounds", 2),
+                apply_to_pseudo=self._prt_config.get("apply_to_pseudo", True),
+            )
+        elif self._prt_enabled and not self._pseudo_agg_enabled:
+            logging.warning("PRT requires Pseudo Aggregation to be enabled. PRT will be disabled.")
+            self._prt_enabled = False
 
         if "situational_awareness" in self.config.participant:
             await self.sa.init()
