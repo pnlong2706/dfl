@@ -55,6 +55,7 @@ class Scenario:
         pseudo_aggregation,
         fedsam,
         pcr,
+        prt,
         mid_round_test,
         rounds,
         logginglevel,
@@ -185,6 +186,7 @@ class Scenario:
         self.pseudo_aggregation = pseudo_aggregation if pseudo_aggregation else {"enabled": False, "ema_alpha": 0.25}
         self.fedsam = fedsam if fedsam else {"enabled": False, "rho": 0.5}
         self.pcr = pcr if pcr else {"enabled": False, "mu": 0.01, "apply_mode": "pseudo_only"}
+        self.prt = prt if prt else {"enabled": False, "score_type": "exponential", "scale": 1.0, "min_trust": 0.1, "trust_smoothing": 0.5, "warmup_rounds": 2, "apply_to_pseudo": True}
         self.mid_round_test = mid_round_test if mid_round_test is not None else False
         self.rounds = rounds
         self.logginglevel = logginglevel
@@ -707,6 +709,7 @@ class ScenarioManagement:
             participant_config["device_args"]["logging"] = self.scenario.logginglevel
             participant_config["aggregator_args"]["algorithm"] = self.scenario.agg_algorithm
             participant_config["aggregator_args"]["pseudo_aggregation"] = self.scenario.pseudo_aggregation
+            participant_config["aggregator_args"]["prt"] = self.scenario.prt
             # To be sure that benign nodes have no attack parameters
             if node_config["role"] == "malicious":
                 participant_config["adversarial_args"]["fake_behavior"] = node_config["fake_behavior"]
