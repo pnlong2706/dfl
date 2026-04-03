@@ -93,6 +93,16 @@ class DFLUpdateHandler(UpdateHandler):
         self._weight_schedule_step = 1  # Number of physical rounds before applying drop_rate
         self._stop_pseudo_round = None  # Physical round after which to stop pseudo aggregation (None = no limit)
 
+        # PRT (Prediction-Residual Trust) configuration
+        self._prt_enabled = False
+        self._prt_score_type = "exponential"
+        self._prt_scale = 1.0
+        self._prt_min_trust = 0.1
+        self._prt_trust_smoothing = 0.5
+        self._prt_warmup_rounds = 2
+        self._prt_apply_to_pseudo = True
+        self._prt_trust_scores: dict[str, float] = {}  # neighbor_id -> smoothed trust
+
     @property
     def us(self):
         """Returns the internal updates storage dictionary."""
@@ -623,3 +633,109 @@ class DFLUpdateHandler(UpdateHandler):
             logging.info(f"Pseudo Aggregation: Predicted {len(predicted_models)} models for all neighbors")
 
         return predicted_models
+
+    # ========== PRT (Prediction-Residual Trust) Methods ==========
+
+    def enable_prt(
+        self,
+        score_type: str = "exponential",
+        scale: float = 1.0,
+        min_trust: float = 0.1,
+        trust_smoothing: float = 0.5,
+        warmup_rounds: int = 2,
+        apply_to_pseudo: bool = True,
+    ):
+        """
+        Enable PRT (Prediction-Residual Trust) for Byzantine defense.
+
+        PRT compares actual received models to EMA predictions. Large residuals
+        reduce a neighbor's trust score, which scales down its aggregation weight.
+
+        Requires Pseudo Aggregation to be enabled (for EMA predictions).
+
+        Args:
+            score_type: Trust function type ("exponential" or "inverse").
+            scale: Scaling factor for residual in trust function.
+            min_trust: Floor value for trust score (prevents zero weight).
+            trust_smoothing: EMA smoothing for trust updates (0=keep old, 1=use new).
+            warmup_rounds: Number of rounds before PRT starts (trust=1.0 during warmup).
+            apply_to_pseudo: Whether to apply trust scores to pseudo round weights.
+        """
+        self._prt_enabled = True
+        self._prt_score_type = score_type
+        self._prt_scale = scale
+        self._prt_min_trust = min_trust
+        self._prt_trust_smoothing = trust_smoothing
+        self._prt_warmup_rounds = warmup_rounds
+        self._prt_apply_to_pseudo = apply_to_pseudo
+        logging.info(
+            f"PRT enabled: score_type={score_type}, scale={scale}, min_trust={min_trust}, "
+            f"trust_smoothing={trust_smoothing}, warmup_rounds={warmup_rounds}, apply_to_pseudo={apply_to_pseudo}"
+        )
+
+    def compute_prt_trust(self, neighbor_id: str, actual_model: OrderedDict, current_round: int) -> float:
+        """
+        Compute trust score from residual between actual and predicted model.
+
+        Called on real communication rounds when an actual model arrives.
+        Compares actual model to EMA-predicted model, converts residual magnitude
+        to a trust score, and applies EMA smoothing across rounds.
+
+        Args:
+            neighbor_id: Identifier of the neighbor node.
+            actual_model: Actually received model state dict.
+            current_round: Current round number.
+
+        Returns:
+            float: Smoothed trust score in [min_trust, 1.0].
+        """
+        if not self._prt_enabled or not self._pseudo_agg_enabled:
+            return 1.0
+
+        if current_round < self._prt_warmup_rounds:
+            return 1.0
+
+        predicted_model = self.predict_neighbor_model(neighbor_id, current_round)
+        if predicted_model is None:
+            return 1.0
+
+        # Compute normalized residual (RMS per parameter)
+        skip_keys = {'running_mean', 'running_var', 'num_batches_tracked'}
+        residual_sq_sum = 0.0
+        param_count = 0
+        for key in actual_model.keys():
+            if any(sk in key for sk in skip_keys):
+                continue
+            if key in predicted_model:
+                diff = actual_model[key].float() - predicted_model[key].float()
+                residual_sq_sum += diff.pow(2).sum().item()
+                param_count += diff.numel()
+
+        if param_count == 0:
+            return 1.0
+
+        normalized_residual = (residual_sq_sum / param_count) ** 0.5
+
+        # Score function
+        import math
+        if self._prt_score_type == "exponential":
+            raw_trust = math.exp(-self._prt_scale * normalized_residual)
+        else:
+            raw_trust = 1.0 / (1.0 + self._prt_scale * normalized_residual)
+
+        raw_trust = max(raw_trust, self._prt_min_trust)
+
+        # EMA smoothing
+        old_trust = self._prt_trust_scores.get(neighbor_id, 1.0)
+        smoothed_trust = (1 - self._prt_trust_smoothing) * old_trust + self._prt_trust_smoothing * raw_trust
+        self._prt_trust_scores[neighbor_id] = smoothed_trust
+
+        logging.info(
+            f"PRT | neighbor={neighbor_id} | residual={normalized_residual:.6f} | "
+            f"raw_trust={raw_trust:.4f} | smoothed_trust={smoothed_trust:.4f}"
+        )
+        return smoothed_trust
+
+    def get_prt_trust_scores(self) -> dict[str, float]:
+        """Return a copy of current PRT trust scores for all neighbors."""
+        return self._prt_trust_scores.copy()
