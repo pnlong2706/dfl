@@ -1,5 +1,4 @@
-# FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
-FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Madrid
@@ -40,6 +39,7 @@ ENV PATH="/root/.local/bin/:$PATH"
 COPY pyproject.toml .
 RUN uv python install 3.11.7 \
  && uv python pin 3.11.7 \
- && uv sync --group core
+ && uv sync --group core \
+ && uv pip install torch==2.5.0 torchvision==0.20.0 --index-url https://download.pytorch.org/whl/cu124
 
 ENV PATH=".venv/bin:$PATH"

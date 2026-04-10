@@ -717,6 +717,10 @@ class Engine:
                 trust_smoothing=self._prt_config.get("trust_smoothing", 0.5),
                 warmup_rounds=self._prt_config.get("warmup_rounds", 2),
                 apply_to_pseudo=self._prt_config.get("apply_to_pseudo", True),
+                adaptive=self._prt_config.get("adaptive", True),
+                exclusion_z=self._prt_config.get("exclusion_z", 2.5),
+                direction_check=self._prt_config.get("direction_check", True),
+                direction_penalty=self._prt_config.get("direction_penalty", 0.3),
             )
         elif self._prt_enabled and not self._pseudo_agg_enabled:
             logging.warning("PRT requires Pseudo Aggregation to be enabled. PRT will be disabled.")

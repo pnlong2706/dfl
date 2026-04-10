@@ -16,5 +16,8 @@ class ChangeableSubset(Subset):
             return self.dataset[[self.indices[i] for i in idx]]
         return self.dataset[self.indices[idx]]
 
+    def __getitems__(self, indices):
+        return [self.__getitem__(idx) for idx in indices]
+
     def __len__(self):
         return len(self.indices)

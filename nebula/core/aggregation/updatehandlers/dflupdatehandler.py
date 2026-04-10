@@ -103,6 +103,15 @@ class DFLUpdateHandler(UpdateHandler):
         self._prt_apply_to_pseudo = True
         self._prt_trust_scores: dict[str, float] = {}  # neighbor_id -> smoothed trust
 
+        # Adaptive PRT extensions
+        self._prt_adaptive = True  # Use z-score relative scoring
+        self._prt_exclusion_z = 2.5  # Z-score threshold for hard exclusion
+        self._prt_direction_check = True  # Enable cosine similarity check
+        self._prt_direction_penalty = 0.3  # Penalty for opposing consensus direction
+        self._prt_pending_residuals: dict[str, float] = {}  # neighbor_id -> raw residual (current round)
+        self._prt_pending_deltas: dict[str, object] = {}  # neighbor_id -> model delta (current round)
+        self._prt_suspicion_count: dict[str, int] = {}  # neighbor_id -> cumulative suspicion count
+
     @property
     def us(self):
         """Returns the internal updates storage dictionary."""
@@ -199,9 +208,9 @@ class DFLUpdateHandler(UpdateHandler):
 
                 # Update EMA if pseudo aggregation is enabled (for actual aggregation rounds)
                 if self._pseudo_agg_enabled:
-                    # Compute PRT trust BEFORE update_ema (which overwrites _old_models)
+                    # Store residual for PRT BEFORE update_ema (which overwrites _old_models)
                     if self._prt_enabled and source in self._old_models and source in self._ema_deltas:
-                        self.compute_prt_trust(source, model, round)
+                        self._store_prt_residual(source, model, round)
                     self._old_model_rounds[source] = round  # Track round when model was received
                     self.update_ema(source, model)
 
@@ -235,6 +244,11 @@ class DFLUpdateHandler(UpdateHandler):
             self._missing_ones.clear()
 
         self._nodes_using_historic.clear()
+
+        # Finalize PRT trust scores using all residuals from this round
+        if self._prt_enabled and self._prt_pending_residuals:
+            self._finalize_prt_trust()
+
         updates = {}
         for sr in self._sources_received:
             source_historic = self.us[sr][1]
@@ -251,6 +265,9 @@ class DFLUpdateHandler(UpdateHandler):
             weight = updt.weight
             if self._prt_enabled and sr in self._prt_trust_scores:
                 trust = self._prt_trust_scores[sr]
+                if trust <= 0:
+                    logging.info(f"PRT EXCLUDED | neighbor={sr} | trust=0 (hard exclusion)")
+                    continue  # Fully exclude this neighbor
                 weight = weight * trust
                 logging.info(f"PRT weight adjustment | neighbor={sr} | original={updt.weight:.2f} | trust={trust:.4f} | effective={weight:.2f}")
             updates[sr] = (updt.model, weight)
@@ -659,6 +676,10 @@ class DFLUpdateHandler(UpdateHandler):
         trust_smoothing: float = 0.5,
         warmup_rounds: int = 2,
         apply_to_pseudo: bool = True,
+        adaptive: bool = True,
+        exclusion_z: float = 2.5,
+        direction_check: bool = True,
+        direction_penalty: float = 0.3,
     ):
         """
         Enable PRT (Prediction-Residual Trust) for Byzantine defense.
@@ -666,15 +687,22 @@ class DFLUpdateHandler(UpdateHandler):
         PRT compares actual received models to EMA predictions. Large residuals
         reduce a neighbor's trust score, which scales down its aggregation weight.
 
+        Adaptive mode (default) uses z-score relative scoring across all neighbors
+        instead of fixed-scale absolute scoring, plus directional consistency checks.
+
         Requires Pseudo Aggregation to be enabled (for EMA predictions).
 
         Args:
-            score_type: Trust function type ("exponential" or "inverse").
-            scale: Scaling factor for residual in trust function.
-            min_trust: Floor value for trust score (prevents zero weight).
+            score_type: Trust function type ("exponential" or "inverse"). Used in non-adaptive mode.
+            scale: Scaling factor for residual in trust function. Used in non-adaptive mode.
+            min_trust: Floor value for trust score (prevents zero weight in non-adaptive mode).
             trust_smoothing: EMA smoothing for trust updates (0=keep old, 1=use new).
             warmup_rounds: Number of rounds before PRT starts (trust=1.0 during warmup).
             apply_to_pseudo: Whether to apply trust scores to pseudo round weights.
+            adaptive: Use z-score relative scoring instead of fixed-scale absolute scoring.
+            exclusion_z: Z-score threshold for hard exclusion (adaptive mode only).
+            direction_check: Enable cosine similarity check against consensus direction.
+            direction_penalty: Trust multiplier for updates opposing consensus (0=full penalty, 1=no penalty).
         """
         self._prt_enabled = True
         self._prt_score_type = score_type
@@ -683,41 +711,35 @@ class DFLUpdateHandler(UpdateHandler):
         self._prt_trust_smoothing = trust_smoothing
         self._prt_warmup_rounds = warmup_rounds
         self._prt_apply_to_pseudo = apply_to_pseudo
+        self._prt_adaptive = adaptive
+        self._prt_exclusion_z = exclusion_z
+        self._prt_direction_check = direction_check
+        self._prt_direction_penalty = direction_penalty
         logging.info(
-            f"PRT enabled: score_type={score_type}, scale={scale}, min_trust={min_trust}, "
+            f"PRT enabled: adaptive={adaptive}, exclusion_z={exclusion_z}, "
+            f"direction_check={direction_check}, direction_penalty={direction_penalty}, "
+            f"score_type={score_type}, scale={scale}, min_trust={min_trust}, "
             f"trust_smoothing={trust_smoothing}, warmup_rounds={warmup_rounds}, apply_to_pseudo={apply_to_pseudo}"
         )
 
-    def compute_prt_trust(self, neighbor_id: str, actual_model: OrderedDict, current_round: int) -> float:
+    def _store_prt_residual(self, neighbor_id: str, actual_model: OrderedDict, current_round: int):
         """
-        Compute trust score from residual between actual and predicted model.
-
-        Called on real communication rounds when an actual model arrives.
-        Compares actual model to EMA-predicted model, converts residual magnitude
-        to a trust score, and applies EMA smoothing across rounds.
-
-        Args:
-            neighbor_id: Identifier of the neighbor node.
-            actual_model: Actually received model state dict.
-            current_round: Current round number.
-
-        Returns:
-            float: Smoothed trust score in [min_trust, 1.0].
+        Compute and store the prediction residual and model delta for a neighbor.
+        Called when each model arrives; trust is finalized later in _finalize_prt_trust.
         """
         if not self._prt_enabled or not self._pseudo_agg_enabled:
-            return 1.0
-
+            return
         if current_round < self._prt_warmup_rounds:
-            return 1.0
+            return
 
         predicted_model = self.predict_neighbor_model(neighbor_id, current_round)
         if predicted_model is None:
-            return 1.0
+            return
 
-        # Compute normalized residual (RMS per parameter)
         skip_keys = {'running_mean', 'running_var', 'num_batches_tracked'}
         residual_sq_sum = 0.0
         param_count = 0
+        delta_flat = []
         for key in actual_model.keys():
             if any(sk in key for sk in skip_keys):
                 continue
@@ -727,29 +749,145 @@ class DFLUpdateHandler(UpdateHandler):
                 param_count += diff.numel()
 
         if param_count == 0:
-            return 1.0
+            return
 
         normalized_residual = (residual_sq_sum / param_count) ** 0.5
+        self._prt_pending_residuals[neighbor_id] = normalized_residual
 
-        # Score function
+        # Store model delta (actual - old) for directional check
+        if self._prt_direction_check and neighbor_id in self._old_models:
+            import torch
+            old_model = self._old_models[neighbor_id]
+            delta = []
+            for key in actual_model.keys():
+                if any(sk in key for sk in skip_keys):
+                    continue
+                if key in old_model:
+                    delta.append((actual_model[key].float() - old_model[key].float()).flatten())
+            if delta:
+                self._prt_pending_deltas[neighbor_id] = torch.cat(delta)
+
+    def _finalize_prt_trust(self):
+        """
+        Compute final trust scores using all pending residuals from this round.
+
+        Adaptive mode: uses z-score relative scoring (outlier detection across neighbors).
+        Non-adaptive mode: uses fixed-scale absolute scoring (original behavior).
+        """
         import math
-        if self._prt_score_type == "exponential":
-            raw_trust = math.exp(-self._prt_scale * normalized_residual)
+        import torch
+
+        if not self._prt_pending_residuals:
+            return
+
+        residuals = self._prt_pending_residuals
+        neighbor_ids = list(residuals.keys())
+
+        if self._prt_adaptive and len(residuals) >= 3:
+            # === Adaptive z-score relative scoring ===
+            vals = list(residuals.values())
+            mu = sum(vals) / len(vals)
+            sigma = (sum((v - mu) ** 2 for v in vals) / len(vals)) ** 0.5 + 1e-10
+
+            for nid in neighbor_ids:
+                z_score = (residuals[nid] - mu) / sigma
+
+                # Hard exclusion for extreme outliers
+                if z_score > self._prt_exclusion_z:
+                    raw_trust = 0.0
+                    self._prt_suspicion_count[nid] = self._prt_suspicion_count.get(nid, 0) + 1
+                    logging.info(
+                        f"PRT ADAPTIVE | neighbor={nid} | residual={residuals[nid]:.6f} | "
+                        f"z_score={z_score:.3f} > {self._prt_exclusion_z} | EXCLUDED | "
+                        f"suspicion_count={self._prt_suspicion_count[nid]}"
+                    )
+                else:
+                    # Gaussian falloff for z > 0 (worse than average = penalized)
+                    raw_trust = math.exp(-max(z_score, 0) ** 2 / 2.0)
+                    logging.info(
+                        f"PRT ADAPTIVE | neighbor={nid} | residual={residuals[nid]:.6f} | "
+                        f"z_score={z_score:.3f} | raw_trust={raw_trust:.4f}"
+                    )
+
+                # Directional consistency check
+                if self._prt_direction_check and raw_trust > 0 and len(self._prt_pending_deltas) >= 2:
+                    raw_trust = self._apply_direction_check(nid, raw_trust)
+
+                # Suspicion memory: persistent penalty for repeat offenders
+                suspicion = self._prt_suspicion_count.get(nid, 0)
+                if suspicion > 0 and raw_trust > 0:
+                    persistence_factor = max(0.7 ** suspicion, self._prt_min_trust)
+                    raw_trust *= persistence_factor
+                    logging.info(f"PRT SUSPICION | neighbor={nid} | suspicion_count={suspicion} | factor={persistence_factor:.4f}")
+
+                # EMA smoothing
+                old_trust = self._prt_trust_scores.get(nid, 1.0)
+                smoothed = (1 - self._prt_trust_smoothing) * old_trust + self._prt_trust_smoothing * raw_trust
+                self._prt_trust_scores[nid] = smoothed
+                logging.info(f"PRT FINAL | neighbor={nid} | smoothed_trust={smoothed:.4f}")
+
+                # Reduce suspicion slowly when node behaves well
+                if z_score < 0.5 and nid in self._prt_suspicion_count and self._prt_suspicion_count[nid] > 0:
+                    self._prt_suspicion_count[nid] = max(0, self._prt_suspicion_count[nid] - 1)
+
         else:
-            raw_trust = 1.0 / (1.0 + self._prt_scale * normalized_residual)
+            # === Non-adaptive: fixed-scale absolute scoring (original behavior) ===
+            for nid in neighbor_ids:
+                normalized_residual = residuals[nid]
+                if self._prt_score_type == "exponential":
+                    raw_trust = math.exp(-self._prt_scale * normalized_residual)
+                else:
+                    raw_trust = 1.0 / (1.0 + self._prt_scale * normalized_residual)
+                raw_trust = max(raw_trust, self._prt_min_trust)
 
-        raw_trust = max(raw_trust, self._prt_min_trust)
+                old_trust = self._prt_trust_scores.get(nid, 1.0)
+                smoothed = (1 - self._prt_trust_smoothing) * old_trust + self._prt_trust_smoothing * raw_trust
+                self._prt_trust_scores[nid] = smoothed
+                logging.info(
+                    f"PRT | neighbor={nid} | residual={normalized_residual:.6f} | "
+                    f"raw_trust={raw_trust:.4f} | smoothed_trust={smoothed:.4f}"
+                )
 
-        # EMA smoothing
-        old_trust = self._prt_trust_scores.get(neighbor_id, 1.0)
-        smoothed_trust = (1 - self._prt_trust_smoothing) * old_trust + self._prt_trust_smoothing * raw_trust
-        self._prt_trust_scores[neighbor_id] = smoothed_trust
+        # Clear pending state for next round
+        self._prt_pending_residuals.clear()
+        self._prt_pending_deltas.clear()
 
-        logging.info(
-            f"PRT | neighbor={neighbor_id} | residual={normalized_residual:.6f} | "
-            f"raw_trust={raw_trust:.4f} | smoothed_trust={smoothed_trust:.4f}"
-        )
-        return smoothed_trust
+    def _apply_direction_check(self, neighbor_id: str, raw_trust: float) -> float:
+        """
+        Penalize neighbors whose model update direction opposes the consensus.
+        Catches Dissensus-style attacks that reverse gossip progress.
+        """
+        import torch
+
+        if neighbor_id not in self._prt_pending_deltas:
+            return raw_trust
+
+        neighbor_delta = self._prt_pending_deltas[neighbor_id]
+
+        # Compute average delta across all neighbors (consensus direction)
+        other_deltas = [d for nid, d in self._prt_pending_deltas.items() if nid != neighbor_id]
+        if not other_deltas:
+            return raw_trust
+
+        avg_delta = torch.stack(other_deltas).mean(dim=0)
+
+        # Cosine similarity
+        cos_sim = torch.nn.functional.cosine_similarity(
+            neighbor_delta.unsqueeze(0), avg_delta.unsqueeze(0)
+        ).item()
+
+        if cos_sim < 0:
+            # Opposing consensus direction — apply penalty
+            # cos_sim in [-1, 0]: more negative = stronger penalty
+            penalty = self._prt_direction_penalty + (1 - self._prt_direction_penalty) * (1 + cos_sim)
+            raw_trust *= penalty
+            self._prt_suspicion_count[neighbor_id] = self._prt_suspicion_count.get(neighbor_id, 0) + 1
+            logging.info(
+                f"PRT DIRECTION | neighbor={neighbor_id} | cos_sim={cos_sim:.4f} | "
+                f"penalty={penalty:.4f} | adjusted_trust={raw_trust:.4f}"
+            )
+
+        return raw_trust
 
     def get_prt_trust_scores(self) -> dict[str, float]:
         """Return a copy of current PRT trust scores for all neighbors."""
