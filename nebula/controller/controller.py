@@ -314,23 +314,23 @@ async def run_scenario(
 
     from nebula.controller.scenarios import ScenarioManagement
 
-    validate_physical_fields(scenario_data)
-
-    # Manager for the actual scenario
-    scenarioManagement = ScenarioManagement(scenario_data, user)
-
-    await update_scenario(
-        scenario_name=scenarioManagement.scenario_name,
-        start_time=scenarioManagement.start_date_scenario,
-        end_time="",
-        scenario=scenario_data,
-        status="running",
-        role=role,
-        username=user,
-    )
-
-    # Run the actual scenario
     try:
+        validate_physical_fields(scenario_data)
+
+        # Manager for the actual scenario
+        scenarioManagement = ScenarioManagement(scenario_data, user)
+
+        await update_scenario(
+            scenario_name=scenarioManagement.scenario_name,
+            start_time=scenarioManagement.start_date_scenario,
+            end_time="",
+            scenario=scenario_data,
+            status="running",
+            role=role,
+            username=user,
+        )
+
+        # Run the actual scenario
         if scenarioManagement.scenario.mobility:
             additional_participants = scenario_data["additional_participants"]
             schema_additional_participants = scenario_data["schema_additional_participants"]
@@ -339,11 +339,11 @@ async def run_scenario(
             )
         else:
             await scenarioManagement.load_configurations_and_start_nodes()
-    except subprocess.CalledProcessError as e:
-        logging.exception(f"Error docker-compose up: {e}")
-        return
 
-    return scenarioManagement.scenario_name
+        return scenarioManagement.scenario_name
+    except Exception as e:
+        logging.exception(f"SCENARIO RUN ERROR: {e}")
+        raise
 
 
 @app.post("/scenarios/stop")

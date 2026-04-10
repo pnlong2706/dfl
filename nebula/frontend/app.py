@@ -2161,8 +2161,8 @@ async def assign_available_gpu(scenario_data, role):
     # Obtain available system_gpus
     available_system_gpus = response.get("available_gpus", None) if response is not None else None
 
-    logging.info(response.get("available_gpus", None))
-    logging.info("AHAHUIHIAUHFAJSHF")
+    logging.info(f"GPU response: {response}")
+    logging.info(f"available_system_gpus: {available_system_gpus}")
 
     if available_system_gpus:
         running_scenarios = await get_running_scenarios(get_all=True)
@@ -2185,6 +2185,7 @@ async def assign_available_gpu(scenario_data, role):
             available_gpus = available_system_gpus
 
     # Assign gpus based in user role
+    logging.info(f"available_gpus after filtering: {available_gpus}, role: {role}")
     if len(available_gpus) > 0:
         if role == "user":
             scenario_data["accelerator"] = "gpu"
@@ -2231,7 +2232,7 @@ async def run_scenario(scenario_data: dict, role: str, user: str) -> None:
     # Reserve CPU/GPU based on availability and role
     scenario_data = await assign_available_gpu(scenario_data, role)
 
-        # Check if accelerator is CPU - prevent running without GPU
+    # Check if accelerator is CPU - prevent running without GPU
     if scenario_data.get("accelerator") == "cpu":
         logging.error(
             f"[{scenario_data.get('scenario_title', 'Unnamed')}] "
@@ -2245,7 +2246,9 @@ async def run_scenario(scenario_data: dict, role: str, user: str) -> None:
         return  # Stop immediately, don't create any nodes
 
     # Launch on the controller
+    logging.info(f"[{scenario_data.get('scenario_title')}] Deploying to controller...")
     scenario_name = await deploy_scenario(scenario_data, role, user)
+    logging.info(f"[{scenario_data.get('scenario_title')}] Controller returned: {scenario_name}")
 
     # Register for synchronization
     user_data.nodes_registration[scenario_name] = {
@@ -2274,7 +2277,11 @@ async def run_scenarios(role, user):
         for scenario_data in user_data.scenarios_list:
             user_data.finish_scenario_event.clear()
             logging.info(f"Running scenario {scenario_data['scenario_title']}")
-            await run_scenario(scenario_data, role, user)
+            try:
+                await run_scenario(scenario_data, role, user)
+            except Exception as e:
+                logging.exception(f"run_scenario CRASHED: {e}")
+                continue
             # Waits till the scenario is completed
             while not user_data.finish_scenario_event.is_set() and not user_data.stop_all_scenarios_event.is_set():
                 await asyncio.sleep(1)
@@ -2289,6 +2296,8 @@ async def run_scenarios(role, user):
                 return
             user_data.scenarios_finished += 1
             await asyncio.sleep(5)
+    except Exception as e:
+        logging.exception(f"run_scenarios CRASHED: {e}")
     finally:
         user_data.scenarios_list_length = 0
 
@@ -2315,32 +2324,41 @@ async def nebula_dashboard_deployment_run(
         HTTPException: 401 Unauthorized if the user is not logged in or content type is invalid.
         HTTPException: 503 Service Unavailable if resources are insufficient.
     """
-    enough_resources = await check_enough_resources()
+    try:
+        enough_resources = await check_enough_resources()
 
-    if "user" not in session:
-        raise HTTPException(status_code=401, detail="Login in to deploy scenarios")
-    elif not enough_resources:
-        raise HTTPException(status_code=503, detail="Not enough resources to run a scenario")
+        if "user" not in session:
+            raise HTTPException(status_code=401, detail="Login in to deploy scenarios")
+        elif not enough_resources:
+            raise HTTPException(status_code=503, detail="Not enough resources to run a scenario")
 
-    if request.headers.get("content-type") != "application/json":
-        raise HTTPException(status_code=401)
+        if request.headers.get("content-type") != "application/json":
+            raise HTTPException(status_code=401)
 
-    data = await request.json()
-    user_data = user_data_store[session["user"]]
+        data = await request.json()
+        user_key = session["user"]
+        if user_key not in user_data_store:
+            user_data_store[user_key] = UserData()
+        user_data = user_data_store[user_key]
 
-    if user_data.scenarios_list_length < 1:
-        user_data.scenarios_finished = 0
-        user_data.scenarios_list_length = len(data)
-        user_data.scenarios_list = data
-        background_tasks.add_task(run_scenarios, session["role"], session["user"])
-    else:
-        user_data.scenarios_list_length += len(data)
-        user_data.scenarios_list.extend(data)
-        await asyncio.sleep(3)
-    logging.info(
-        f"Running deployment with {len(data)} scenarios_list_length: {user_data.scenarios_list_length} scenarios"
-    )
-    return RedirectResponse(url="/platform/dashboard", status_code=303)
+        if user_data.scenarios_list_length < 1:
+            user_data.scenarios_finished = 0
+            user_data.scenarios_list_length = len(data)
+            user_data.scenarios_list = data
+            background_tasks.add_task(run_scenarios, session["role"], session["user"])
+        else:
+            user_data.scenarios_list_length += len(data)
+            user_data.scenarios_list.extend(data)
+            await asyncio.sleep(3)
+        logging.info(
+            f"Running deployment with {len(data)} scenarios_list_length: {user_data.scenarios_list_length} scenarios"
+        )
+        return RedirectResponse(url="/platform/dashboard", status_code=303)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception(f"DEPLOYMENT ERROR: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     # return Response(content="Success", status_code=200)
 
 

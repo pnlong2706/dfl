@@ -8,7 +8,11 @@ const AttackManager = (function() {
         GLL_NEURON_INVERSION: 'GLL Neuron Inversion',
         SWAPPING_WEIGHTS: 'Swapping Weights',
         DELAYER: 'Delayer',
-        FLOODING: 'Flooding'
+        FLOODING: 'Flooding',
+        ALIE: 'ALIE',
+        TRIM_ATTACK: 'Trim Attack',
+        KRUM_ATTACK: 'Krum Attack',
+        DISSENSUS: 'Dissensus'
     };
 
     function updateAttackUI(attackType) {
@@ -71,6 +75,13 @@ const AttackManager = (function() {
             case ATTACK_TYPES.FLOODING:
                 showElements(elements, ['poisonedNode', 'startAttack', 'stopAttack', 'attackInterval', 'targetPercentage', 'selectionInterval', 'floodingFactor']);
                 break;
+
+            case ATTACK_TYPES.ALIE:
+            case ATTACK_TYPES.TRIM_ATTACK:
+            case ATTACK_TYPES.KRUM_ATTACK:
+            case ATTACK_TYPES.DISSENSUS:
+                showElements(elements, ['poisonedNode', 'startAttack', 'stopAttack', 'attackInterval']);
+                break;
         }
     }
 
@@ -92,7 +103,7 @@ const AttackManager = (function() {
                 targetLabel: {title: document.getElementById("target_label-title"), container: document.getElementById("target_label-container")},
                 targetChangedLabel: {title: document.getElementById("target_changed_label-title"), container: document.getElementById("target_changed_label-container")}
             };
-            
+
             if (this.checked && attackType === ATTACK_TYPES.LABEL_FLIPPING) {
                 showElements(elements, ['targetLabel', 'targetChangedLabel']);
             } else if (this.checked && attackType === ATTACK_TYPES.SAMPLE_POISONING) {
@@ -118,23 +129,22 @@ const AttackManager = (function() {
 
     function getAttackConfig() {
         const attackType = document.getElementById("poisoning-attack-select").value;
-        
+
         // Validate numeric inputs
         function validateNumericInput(id, min = 0, max = 100) {
-            const value = parseFloat(document.getElementById(id).value);
-            if (isNaN(value) || value < min || value > max) {
-                throw new Error(`Invalid value for ${id}: must be between ${min} and ${max}`);
-            }
-            return value;
+            const el = document.getElementById(id);
+            const value = parseFloat(el ? el.value : 0);
+            if (isNaN(value)) return min;
+            return Math.max(min, Math.min(max, value));
         }
 
         // Base config with common parameters
         const config = {
             attacks: attackType, // Send as string instead of array
             poisoned_node_percent: validateNumericInput("poisoned-node-percent"),
-            round_start_attack: validateNumericInput("start-attack", 0),
-            round_stop_attack: validateNumericInput("stop-attack", 0),
-            attack_interval: validateNumericInput("attack-interval", 1)
+            round_start_attack: validateNumericInput("start-attack", 0, 10000),
+            round_stop_attack: validateNumericInput("stop-attack", 0, 10000),
+            attack_interval: validateNumericInput("attack-interval", 1, 10000)
         };
 
         // Add attack-specific parameters

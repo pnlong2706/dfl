@@ -353,6 +353,10 @@ class Scenario:
             "Swapping Weights",
             "Delayer",
             "Flooding",
+            "ALIE",
+            "Trim Attack",
+            "Krum Attack",
+            "Dissensus",
         }
 
         # Get attack type from attack_params
