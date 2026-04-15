@@ -466,6 +466,17 @@ class DFLUpdateHandler(UpdateHandler):
                 # New parameter appeared, use new value as delta
                 delta[key] = new_model_state_dict[key]
 
+        # Trust-gated EMA update: scale learning rate by trust to prevent
+        # corrupting EMA predictions with data from known-suspicious nodes
+        trust = self._prt_trust_scores.get(neighbor_id, 1.0) if self._prt_enabled else 1.0
+        if trust < 0.3 and self._prt_enabled:
+            # Don't update EMA with highly suspicious data — keep old prediction
+            logging.info(f"EMA SKIP | neighbor={neighbor_id} | trust={trust:.4f} < 0.3 | keeping old EMA")
+            self.store_old_model(neighbor_id, new_model_state_dict)
+            return
+
+        effective_alpha = self._ema_alpha * trust if self._prt_enabled else self._ema_alpha
+
         # Update EMA
         if neighbor_id not in self._ema_deltas:
             # First delta calculation, initialize EMA with this delta
@@ -478,13 +489,12 @@ class DFLUpdateHandler(UpdateHandler):
 
             for key in delta.keys():
                 if key in old_ema:
-                    new_ema[key] = (1 - self._ema_alpha) * old_ema[key] + self._ema_alpha * delta[key]
+                    new_ema[key] = (1 - effective_alpha) * old_ema[key] + effective_alpha * delta[key]
                 else:
-                    # New parameter in delta, initialize with current delta
                     new_ema[key] = delta[key]
 
             self._ema_deltas[neighbor_id] = new_ema
-            logging.debug(f"Updated EMA for neighbor {neighbor_id}")
+            logging.debug(f"Updated EMA for neighbor {neighbor_id} (effective_alpha={effective_alpha:.4f})")
 
         # Store new model as old for next round
         self.store_old_model(neighbor_id, new_model_state_dict)
@@ -784,32 +794,31 @@ class DFLUpdateHandler(UpdateHandler):
         neighbor_ids = list(residuals.keys())
 
         if self._prt_adaptive and len(residuals) >= 3:
-            # === Adaptive z-score relative scoring ===
-            vals = list(residuals.values())
-            mu = sum(vals) / len(vals)
-            sigma = (sum((v - mu) ** 2 for v in vals) / len(vals)) ** 0.5 + 1e-10
+            # === Adaptive MAD-based modified z-score (50% breakdown point) ===
+            # MAD is robust to up to 50% contamination, unlike mean/std (0% breakdown)
+            z_scores = self._iterative_mad_z_scores(residuals)
 
             for nid in neighbor_ids:
-                z_score = (residuals[nid] - mu) / sigma
+                mz = z_scores[nid]
 
                 # Hard exclusion for extreme outliers
-                if z_score > self._prt_exclusion_z:
+                if mz > self._prt_exclusion_z or mz == float('inf'):
                     raw_trust = 0.0
                     self._prt_suspicion_count[nid] = self._prt_suspicion_count.get(nid, 0) + 1
                     logging.info(
                         f"PRT ADAPTIVE | neighbor={nid} | residual={residuals[nid]:.6f} | "
-                        f"z_score={z_score:.3f} > {self._prt_exclusion_z} | EXCLUDED | "
+                        f"mad_z={mz:.3f} > {self._prt_exclusion_z} | EXCLUDED | "
                         f"suspicion_count={self._prt_suspicion_count[nid]}"
                     )
                 else:
-                    # Gaussian falloff for z > 0 (worse than average = penalized)
-                    raw_trust = math.exp(-max(z_score, 0) ** 2 / 2.0)
+                    # Gaussian falloff for z > 0 (worse than median = penalized)
+                    raw_trust = math.exp(-max(mz, 0) ** 2 / 2.0)
                     logging.info(
                         f"PRT ADAPTIVE | neighbor={nid} | residual={residuals[nid]:.6f} | "
-                        f"z_score={z_score:.3f} | raw_trust={raw_trust:.4f}"
+                        f"mad_z={mz:.3f} | raw_trust={raw_trust:.4f}"
                     )
 
-                # Directional consistency check
+                # Directional consistency check (using median consensus)
                 if self._prt_direction_check and raw_trust > 0 and len(self._prt_pending_deltas) >= 2:
                     raw_trust = self._apply_direction_check(nid, raw_trust)
 
@@ -827,7 +836,7 @@ class DFLUpdateHandler(UpdateHandler):
                 logging.info(f"PRT FINAL | neighbor={nid} | smoothed_trust={smoothed:.4f}")
 
                 # Reduce suspicion slowly when node behaves well
-                if z_score < 0.5 and nid in self._prt_suspicion_count and self._prt_suspicion_count[nid] > 0:
+                if mz < 0.5 and nid in self._prt_suspicion_count and self._prt_suspicion_count[nid] > 0:
                     self._prt_suspicion_count[nid] = max(0, self._prt_suspicion_count[nid] - 1)
 
         else:
@@ -852,9 +861,61 @@ class DFLUpdateHandler(UpdateHandler):
         self._prt_pending_residuals.clear()
         self._prt_pending_deltas.clear()
 
+    def _iterative_mad_z_scores(self, residuals: dict, max_iters: int = 3) -> dict:
+        """
+        Compute modified z-scores using MAD (Median Absolute Deviation).
+        Iteratively exclude outliers and recompute for cleaner statistics.
+
+        MAD has 50% breakdown point — robust to up to 50% contamination,
+        unlike mean/std which has 0% breakdown point.
+        """
+        active = dict(residuals)
+        excluded = set()
+
+        for _ in range(max_iters):
+            if len(active) < 3:
+                break
+
+            vals = sorted(active.values())
+            median_val = vals[len(vals) // 2]
+            abs_devs = sorted(abs(v - median_val) for v in vals)
+            mad = abs_devs[len(abs_devs) // 2] * 1.4826 + 1e-10  # consistency constant for normal dist
+
+            newly_excluded = []
+            for nid, res in list(active.items()):
+                mz = (res - median_val) / mad
+                if mz > self._prt_exclusion_z:
+                    newly_excluded.append(nid)
+                    excluded.add(nid)
+
+            if not newly_excluded:
+                break
+            for nid in newly_excluded:
+                del active[nid]
+
+        # Final z-scores using cleaned statistics
+        if len(active) >= 2:
+            vals = sorted(active.values())
+            final_median = vals[len(vals) // 2]
+            abs_devs = sorted(abs(v - final_median) for v in vals)
+            final_mad = abs_devs[len(abs_devs) // 2] * 1.4826 + 1e-10
+        else:
+            all_vals = sorted(residuals.values())
+            final_median = all_vals[len(all_vals) // 2]
+            final_mad = 1.0
+
+        z_scores = {}
+        for nid in residuals:
+            if nid in excluded:
+                z_scores[nid] = float('inf')
+            else:
+                z_scores[nid] = (residuals[nid] - final_median) / final_mad
+        return z_scores
+
     def _apply_direction_check(self, neighbor_id: str, raw_trust: float) -> float:
         """
         Penalize neighbors whose model update direction opposes the consensus.
+        Uses coordinate-wise MEDIAN (not mean) for robust consensus estimation.
         Catches Dissensus-style attacks that reverse gossip progress.
         """
         import torch
@@ -864,21 +925,21 @@ class DFLUpdateHandler(UpdateHandler):
 
         neighbor_delta = self._prt_pending_deltas[neighbor_id]
 
-        # Compute average delta across all neighbors (consensus direction)
+        # Compute consensus direction using coordinate-wise MEDIAN (robust to 50% contamination)
         other_deltas = [d for nid, d in self._prt_pending_deltas.items() if nid != neighbor_id]
         if not other_deltas:
             return raw_trust
 
-        avg_delta = torch.stack(other_deltas).mean(dim=0)
+        stacked = torch.stack(other_deltas)
+        consensus_delta = stacked.median(dim=0).values
 
         # Cosine similarity
         cos_sim = torch.nn.functional.cosine_similarity(
-            neighbor_delta.unsqueeze(0), avg_delta.unsqueeze(0)
+            neighbor_delta.unsqueeze(0), consensus_delta.unsqueeze(0)
         ).item()
 
         if cos_sim < 0:
             # Opposing consensus direction — apply penalty
-            # cos_sim in [-1, 0]: more negative = stronger penalty
             penalty = self._prt_direction_penalty + (1 - self._prt_direction_penalty) * (1 + cos_sim)
             raw_trust *= penalty
             self._prt_suspicion_count[neighbor_id] = self._prt_suspicion_count.get(neighbor_id, 0) + 1
