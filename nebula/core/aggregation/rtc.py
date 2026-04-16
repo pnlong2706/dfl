@@ -6,12 +6,15 @@ Reference: Yang, C. & Ghaderi, J. (2024).
 AAAI Conference on Artificial Intelligence, 38(19), 21735-21743.
 
 Two-phase aggregation:
-1. REMOVE: Iteratively remove b most outlying neighbors (farthest from weighted mean)
-2. CLIP: Self-centered clipping on remaining neighbors (same as SCClip)
+1. REMOVE: Iteratively remove neighbors farthest from local model until
+   cumulative weight of removed nodes exceeds delta_max (Algo 1)
+2. CLIP: Self-centered clipping with CLIP(v, tau) = min(1, tau/||v||^2) * v (Eq. 11)
+   where tau is computed adaptively from remaining neighbor distances (Eq. 10)
 """
 
 import gc
 import logging
+from collections import OrderedDict
 
 import torch
 
@@ -20,33 +23,53 @@ from nebula.core.aggregation.aggregator import Aggregator
 
 class RTC(Aggregator):
     """
-    RTC: Remove-then-Clip aggregation.
+    RTC: Remove-then-Clip aggregation (AAAI 2024).
 
-    Phase 1 (Remove): Iteratively remove b neighbors farthest from the weighted mean.
-    Phase 2 (Clip): Clip remaining neighbors' differences from local model.
+    Phase 1 (Remove): Iteratively remove neighbors farthest from local model
+                      until cumulative removed weight > delta_max.
+    Phase 2 (Clip): CLIP(v, tau) = min(1, tau/||v||^2) * v on remaining neighbors.
+    Final: weighted sum per Equation 9 from the paper.
     """
 
     def __init__(self, config=None, **kwargs):
         super().__init__(config, **kwargs)
+        # b: max number of removals (count-based approximation of delta_max)
         self.b = config.participant.get("aggregator_args", {}).get("rtc_b", 1)
-        self.tau = config.participant.get("aggregator_args", {}).get("tau", 10.0)
-        logging.info(f"[RTC] Initialized with b={self.b}, tau={self.tau}")
+        # tau: if > 0, used as fixed clipping threshold; if 0, computed adaptively (Eq. 10)
+        self.tau = config.participant.get("aggregator_args", {}).get("tau", 0)
+        logging.info(f"[RTC] Initialized with b={self.b}, tau={self.tau} ({'fixed' if self.tau > 0 else 'adaptive'})")
 
-    def _flatten(self, state_dict):
-        """Flatten state dict to a single vector."""
-        return torch.cat([v.float().flatten() for v in state_dict.values()])
+    def _model_distance_sq(self, model_a, model_b):
+        """Compute squared L2 distance between two models."""
+        dist_sq = 0.0
+        for key in model_a:
+            if key in model_b:
+                dist_sq += torch.sum((model_a[key].float() - model_b[key].float()) ** 2).item()
+        return dist_sq
 
-    def _clip(self, diff, tau):
-        """CLIP(v, tau) = min(1, tau / ||v||) * v"""
-        norm = torch.norm(diff.float()).item()
-        if norm > tau and norm > 0:
-            return diff.float() * (tau / norm)
-        return diff.float()
+    def _compute_adaptive_tau(self, local_model, remaining, delta_max):
+        """
+        Compute adaptive tau per Equation 10:
+        tau_i = (1/delta_max) * sqrt(sum_{j in S_i} w_ij * ||x_i - x_j||^2)
+
+        For uniform weights w_ij = 1/n, this becomes:
+        tau_i = (1/delta_max) * sqrt(sum ||x_i - x_j||^2 / n)
+        """
+        if not remaining or delta_max <= 0:
+            return 10.0  # fallback
+
+        n = len(remaining) + 1  # including self
+        weighted_dist_sq = 0.0
+        for _, m, w in remaining:
+            weighted_dist_sq += self._model_distance_sq(m, local_model) / n
+
+        tau = (1.0 / delta_max) * (weighted_dist_sq ** 0.5)
+        return max(tau, 1e-6)  # prevent zero
 
     def run_aggregation(self, models):
         super().run_aggregation(models)
 
-        models_list = list(models.items())  # [(addr, (state_dict, weight)), ...]
+        models_list = list(models.items())
         if len(models_list) == 0:
             return None
 
@@ -64,51 +87,75 @@ class RTC(Aggregator):
 
         # Separate neighbors from local
         neighbors = [(addr, model, weight) for addr, (model, weight) in models_list if addr != local_addr]
+        n_total = len(models_list)  # total nodes including self
+        keys = list(local_model.keys())
 
-        # ========== REMOVE phase ==========
+        # Uniform mixing weight (fully-connected: w_ij = 1/n)
+        w = 1.0 / n_total
+
+        # ========== REMOVE phase (Algorithm 1) ==========
+        # Remove b neighbors farthest from local model x_i
         remaining = list(neighbors)
-        for removal_round in range(min(self.b, len(remaining) - 1)):
+        removed = []
+        for _ in range(min(self.b, len(remaining) - 1)):
             if len(remaining) <= 1:
                 break
 
-            # Compute weighted mean of local + remaining
-            all_models = [(local_model, 1.0)] + [(m, w) for _, m, w in remaining]
-            total_w = sum(w for _, w in all_models)
-            keys = list(local_model.keys())
-            mean_model = {}
-            for key in keys:
-                mean_model[key] = sum(m[key].float() * (w / total_w) for m, w in all_models)
-
-            # Find and remove farthest neighbor from mean
-            max_dist = -1
+            max_dist_sq = -1
             max_idx = 0
-            for i, (addr, m, w) in enumerate(remaining):
-                dist = sum(
-                    torch.norm(m[key].float() - mean_model[key]).item() ** 2 for key in keys
-                ) ** 0.5
-                if dist > max_dist:
-                    max_dist = dist
+            for i, (addr, m, _w) in enumerate(remaining):
+                dist_sq = self._model_distance_sq(m, local_model)
+                if dist_sq > max_dist_sq:
+                    max_dist_sq = dist_sq
                     max_idx = i
 
-            removed = remaining.pop(max_idx)
-            logging.info(f"[RTC] Remove phase: removed {removed[0]} (dist={max_dist:.4f})")
+            r = remaining.pop(max_idx)
+            removed.append(r)
+            logging.info(f"[RTC] Remove: {r[0]} (dist={max_dist_sq**0.5:.4f})")
 
-        # ========== CLIP phase ==========
-        keys = list(local_model.keys())
+        # ========== Compute tau ==========
+        if self.tau > 0:
+            tau = self.tau
+        else:
+            # Adaptive tau (Eq. 10): delta_max = b * w
+            delta_max = max(self.b * w, 1e-6)
+            tau = self._compute_adaptive_tau(local_model, remaining, delta_max)
+            logging.info(f"[RTC] Adaptive tau={tau:.4f} (delta_max={delta_max:.4f})")
+
+        # ========== CLIP phase + Aggregation (Equation 9) ==========
+        # Eq 9: RTC_i = sum_{j in S_i} w_ij * (x_i + CLIP(x_j - x_i, tau))
+        #              + sum_{j in removed} w_ij * x_i
+        #              + w_ii * x_i
+        #
+        # CLIP(v, tau) = min(1, tau / ||v||^2) * v  (Eq. 11)
+
         accum = {key: torch.zeros_like(local_model[key], dtype=torch.float32) for key in keys}
-        n_total = 1 + len(remaining)  # local + remaining neighbors
 
-        # Add local model
+        # Self-weight: w_ii * x_i
         for key in keys:
-            accum[key] += local_model[key].float() / n_total
+            accum[key] += w * local_model[key].float()
 
-        # Add clipped neighbors
-        for addr, m, w in remaining:
+        # Remaining neighbors: w_ij * (x_i + CLIP(x_j - x_i, tau))
+        for addr, m, _w in remaining:
+            # Compute full-model difference for norm
+            diff_norm_sq = self._model_distance_sq(m, local_model)
+
+            # CLIP scale: min(1, tau / ||v||^2)
+            if diff_norm_sq > tau and diff_norm_sq > 0:
+                scale = tau / diff_norm_sq
+            else:
+                scale = 1.0
+
             for key in keys:
                 diff = m[key].float() - local_model[key].float()
-                clipped_diff = self._clip(diff, self.tau)
-                accum[key] += (local_model[key].float() + clipped_diff) / n_total
+                clipped = local_model[key].float() + diff * scale
+                accum[key] += w * clipped
+
+        # Removed neighbors: w_ij * x_i (contribute local model)
+        for addr, m, _w in removed:
+            for key in keys:
+                accum[key] += w * local_model[key].float()
 
         gc.collect()
-        logging.info(f"[RTC] Aggregated: {len(remaining)} neighbors after removing {self.b}, tau={self.tau}")
+        logging.info(f"[RTC] Aggregated: {len(remaining)} kept, {len(removed)} removed, tau={tau:.4f}")
         return accum
