@@ -52,31 +52,31 @@ EXPERIMENT_CONFIG = {
     # Scenario metadata
     "scenario_title": "CIFAR10 Dir(0.3) Ring DFedAvg",
     "scenario_description": "DFL experiment with CIFAR10, Dirichlet(0.3) distribution, Ring topology, FedAvg aggregation",
-    
+
     # Deployment settings
     "deployment": "process",  # "docker", "process", or "physical"
     "federation": "DFL",  # Decentralized Federated Learning
-    
+
     # Topology
     "topology": "Ring",
     "n_nodes": 20,
-    
+
     # Dataset settings
     "dataset": "CIFAR10",
     "iid": False,
     "partition_selection": "dirichlet",
     "partition_parameter": 0.3,
-    
+
     # Model settings
     "model": "SimpleNet",
-    
+
     # Training settings
     "rounds": 100,
     "epochs": 2,
-    
+
     # Aggregation
     "agg_algorithm": "FedAvg",
-    
+
     # Attack settings (None for this experiment)
     "attack_params": {
         "attacks": "No Attack",
@@ -84,27 +84,27 @@ EXPERIMENT_CONFIG = {
         "poisoned_sample_percent": 0,
         "poisoned_noise_percent": 0
     },
-    
+
     # Defense settings (None for this experiment)
     "reputation": {"enabled": False},
-    
+
     # Device settings
     "accelerator": "gpu",  # Change to "cpu" if no GPU available
     "gpu_id": [0],  # GPU ID(s) to use
-    
+
     # Logging
     "logginglevel": True,
-    
+
     # Network simulation
     "network_simulation": False,
-    
+
     # Mobility
     "mobility": False,
     "random_geo": False,
-    
+
     # Trustworthiness
     "with_trustworthiness": False,
-    
+
     # Situational Awareness
     "with_sa": False,
 }
@@ -116,14 +116,14 @@ EXPERIMENT_CONFIG = {
 
 class NebulaClient:
     """Client for interacting with the NEBULA API."""
-    
+
     def __init__(self, base_url: str, username: str = "admin", password: str = "admin"):
         self.base_url = base_url
         self.username = username
         self.password = password
         self.session = requests.Session()
         self.logged_in = False
-    
+
     def login(self) -> bool:
         """Login to NEBULA and establish session."""
         try:
@@ -142,12 +142,12 @@ class NebulaClient:
         except RequestException as e:
             logger.error(f"Login error: {e}")
             return False
-    
+
     def wait_for_service(self, timeout: int = 60) -> bool:
         """Wait for the NEBULA service to be available."""
         logger.info(f"Waiting for NEBULA service at {self.base_url}...")
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout:
             try:
                 response = self.session.get(f"{self.base_url}/platform", timeout=5)
@@ -157,14 +157,14 @@ class NebulaClient:
             except RequestException:
                 pass
             time.sleep(2)
-        
+
         logger.error("Timeout waiting for NEBULA service")
         return False
-    
+
     def initialize_user_data(self) -> bool:
         """
         Initialize user data by visiting the dashboard.
-        
+
         The NEBULA frontend creates UserData on first dashboard visit.
         This must be called before deploying scenarios.
         """
@@ -183,20 +183,20 @@ class NebulaClient:
         except RequestException as e:
             logger.error(f"Error initializing user data: {e}")
             return False
-    
+
     def deploy_scenario_via_controller(self, scenario_data: dict, role: str = "admin", user: str = "admin") -> dict:
         """
         Deploy a scenario directly via the controller API, bypassing frontend GPU assignment.
-        
+
         This method calls the controller's /scenarios/run endpoint directly,
         which avoids the frontend's assign_available_gpu function that can
         override GPU settings.
-        
+
         Args:
             scenario_data: Scenario configuration dictionary
             role: User role (default: "admin")
             user: Username (default: "admin")
-            
+
         Returns:
             Response data with scenario name
         """
@@ -208,7 +208,7 @@ class NebulaClient:
                 logger.error("ERROR: nodes dictionary is empty! This will fail.")
             else:
                 logger.info(f"First node: {list(scenario_data['nodes'].keys())[0]} -> {scenario_data['nodes'][list(scenario_data['nodes'].keys())[0]]}")
-            
+
             # Call controller directly
             controller_url = f"http://localhost:{CONTROLLER_PORT}/scenarios/run"
             payload = {
@@ -216,14 +216,14 @@ class NebulaClient:
                 "role": role,
                 "user": user
             }
-            
+
             response = requests.post(
                 controller_url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
                 timeout=300  # 5 minute timeout for scenario initialization
             )
-            
+
             if response.status_code == 200:
                 scenario_name = response.json() if response.text else None
                 logger.info(f"Scenario deployed via controller: {scenario_name}")
@@ -231,28 +231,28 @@ class NebulaClient:
             else:
                 logger.error(f"Controller deployment failed: {response.status_code} - {response.text}")
                 return {"error": f"Deployment failed: {response.status_code}", "details": response.text}
-                
+
         except RequestException as e:
             logger.error(f"Controller deployment error: {e}")
             return {"error": str(e)}
-    
+
     def deploy_scenario(self, scenario_data: dict) -> dict:
         """
         Deploy a scenario via the API.
-        
+
         Args:
             scenario_data: Scenario configuration dictionary
-            
+
         Returns:
             Response data with scenario name
         """
         if not self.logged_in:
             if not self.login():
                 return {"error": "Not logged in"}
-        
+
         # Initialize user data by visiting dashboard first
         self.initialize_user_data()
-        
+
         try:
             # The frontend expects a list of scenarios
             response = self.session.post(
@@ -261,7 +261,7 @@ class NebulaClient:
                 headers={"Content-Type": "application/json"},
                 allow_redirects=False
             )
-            
+
             # Accept 200, 303, or 302 as success (redirect to dashboard is expected)
             if response.status_code in [200, 303, 302]:
                 logger.info("Scenario deployment initiated")
@@ -269,11 +269,11 @@ class NebulaClient:
             else:
                 logger.error(f"Deployment failed: {response.status_code} - {response.text}")
                 return {"error": f"Deployment failed: {response.status_code}"}
-                
+
         except RequestException as e:
             logger.error(f"Deployment error: {e}")
             return {"error": str(e)}
-    
+
     def get_running_scenarios(self) -> list:
         """Get list of running scenarios."""
         try:
@@ -288,7 +288,7 @@ class NebulaClient:
         except RequestException as e:
             logger.error(f"Error getting running scenarios: {e}")
             return []
-    
+
     def get_scenarios(self) -> list:
         """Get list of all scenarios."""
         try:
@@ -299,7 +299,7 @@ class NebulaClient:
         except RequestException as e:
             logger.error(f"Error getting scenarios: {e}")
             return []
-    
+
     def stop_scenario(self, scenario_name: str, stop_all: bool = False) -> bool:
         """Stop a running scenario."""
         try:
@@ -318,23 +318,23 @@ class NebulaClient:
 
 class NebulaPlatform:
     """Manages the NEBULA platform lifecycle."""
-    
+
     def __init__(self, script_path: str = "script/run_dfl.sh", username: str = "admin"):
         self.script_path = script_path
         self.username = username
         self.process = None
         self.client = None
-    
+
     def start(self) -> bool:
         """Start the NEBULA platform."""
         logger.info("Starting NEBULA platform...")
-        
+
         # Check if script exists
         if not os.path.exists(self.script_path):
             logger.error(f"Script not found: {self.script_path}")
             logger.info("Please run: make install")
             return False
-        
+
         try:
             # Start the platform using the script
             self.process = subprocess.Popen(
@@ -344,15 +344,15 @@ class NebulaPlatform:
                 preexec_fn=os.setsid,
                 cwd=os.getcwd()
             )
-            
+
             logger.info(f"NEBULA process started (PID: {self.process.pid})")
-            
+
             # Initialize API client
             self.client = NebulaClient(
                 f"http://localhost:{FRONTEND_PORT}",
                 username=self.username
             )
-            
+
             # Wait for service to be available
             if self.client.wait_for_service(timeout=120):
                 logger.info(f"NEBULA UI available at: http://localhost:{FRONTEND_PORT}")
@@ -361,11 +361,11 @@ class NebulaPlatform:
                 logger.error("Failed to start NEBULA platform")
                 self.stop()
                 return False
-                
+
         except Exception as e:
             logger.error(f"Error starting platform: {e}")
             return False
-    
+
     def stop(self):
         """Stop the NEBULA platform."""
         if self.process:
@@ -381,11 +381,11 @@ class NebulaPlatform:
                     pass
             self.process = None
             logger.info("NEBULA platform stopped")
-    
+
     def deploy_experiment(self, config: dict, use_controller: bool = True) -> dict:
         """
         Deploy an experiment via the API.
-        
+
         Args:
             config: Scenario configuration dictionary
             use_controller: If True, deploy directly via controller API (bypasses frontend GPU assignment)
@@ -393,12 +393,12 @@ class NebulaPlatform:
         if not self.client:
             logger.error("Platform not started")
             return {"error": "Platform not started"}
-        
+
         # Login if needed
         if not self.client.logged_in:
             if not self.client.login():
                 return {"error": "Login failed"}
-        
+
         if use_controller:
             # Deploy directly via controller to bypass frontend GPU assignment
             return self.client.deploy_scenario_via_controller(config, role="admin", user="admin")
@@ -414,30 +414,30 @@ class NebulaPlatform:
 def generate_topology(n_nodes: int, topology: str, federation: str) -> tuple:
     """
     Generate nodes dictionary and adjacency matrix based on topology type.
-    
+
     This replicates the JavaScript logic from nebula/frontend/static/js/deployment/topology.js
-    
+
     Args:
         n_nodes: Number of nodes
         topology: Topology type ("Ring", "Star", "Fully", "Random")
         federation: Federation type ("CFL", "SFL", "DFL")
-    
+
     Returns:
         Tuple of (nodes_dict, nodes_graph, matrix)
     """
     import random
-    
+
     nodes = {}
     nodes_graph = {}
-    
+
     # Determine role based on federation type
     # CFL: Centralized FL - one server, rest trainers
     # SFL: Semi-decentralized FL - one aggregator, rest trainers
     # DFL: Decentralized FL - all are trainer_aggregators
-    
+
     for i in range(n_nodes):
         node_id = str(i)
-        
+
         # Assign role based on federation and topology
         if federation == "CFL":
             role = "server" if i == 0 else "trainer"
@@ -445,7 +445,7 @@ def generate_topology(n_nodes: int, topology: str, federation: str) -> tuple:
             role = "aggregator" if i == 0 else "trainer"
         else:  # DFL
             role = "trainer_aggregator"
-        
+
         nodes[node_id] = {
             "id": node_id,
             "ip": "127.0.0.1",
@@ -464,7 +464,7 @@ def generate_topology(n_nodes: int, topology: str, federation: str) -> tuple:
             "proxy": False,
             "start": (i == 0),
         }
-    
+
     # Generate links based on topology
     links = []
     if topology == "Fully":
@@ -483,27 +483,27 @@ def generate_topology(n_nodes: int, topology: str, federation: str) -> tuple:
             for j in range(i + 1, n_nodes):
                 if random.random() < 0.3:
                     links.append((i, j))
-    
+
     # Update neighbors based on links
     for source, target in links:
         source_id = str(source)
         target_id = str(target)
-        
+
         # Add to neighbors (bidirectional)
         if target_id not in nodes[source_id]["neighbors"]:
             nodes[source_id]["neighbors"].append(target_id)
         if source_id not in nodes[target_id]["neighbors"]:
             nodes[target_id]["neighbors"].append(source_id)
-        
+
         # Add to links
         nodes[source_id]["links"].append({"source": source, "target": target})
-    
+
     # Generate adjacency matrix
     matrix = [[0] * n_nodes for _ in range(n_nodes)]
     for source, target in links:
         matrix[source][target] = 1
         matrix[target][source] = 1  # Bidirectional
-    
+
     return nodes, nodes_graph, matrix
 
 
@@ -514,69 +514,72 @@ def generate_topology(n_nodes: int, topology: str, federation: str) -> tuple:
 def build_scenario_from_config(config: dict) -> dict:
     """
     Build a complete scenario configuration from a simplified config.
-    
+
     This creates the full scenario data structure expected by the NEBULA frontend.
     """
     # Generate topology
     n_nodes = config.get("n_nodes", 20)
     topology = config.get("topology", "Ring")
     federation = config.get("federation", "DFL")
-    
+
     nodes, nodes_graph, matrix = generate_topology(n_nodes, topology, federation)
-    
+
     scenario = {
         # Metadata
         "scenario_title": config.get("scenario_title", "Experiment"),
         "scenario_description": config.get("scenario_description", ""),
-        
+
         # Deployment
         "deployment": config.get("deployment", "process"),
         "federation": federation,
-        
+
         # Topology
         "topology": topology,
         "n_nodes": n_nodes,
         "nodes": nodes,
         "nodes_graph": nodes_graph,
         "matrix": matrix,
-        
+
         # Dataset
         "dataset": config.get("dataset", "CIFAR10"),
         "iid": config.get("iid", False),
         "partition_selection": config.get("partition_selection", "dirichlet"),
         "partition_parameter": config.get("partition_parameter", 0.3),
-        
+
         # Model
         "model": config.get("model", "SimpleNet"),
-        
+
         # Training
         "rounds": config.get("rounds", 100),
         "epochs": config.get("epochs", 2),
-        
+
         # Aggregation
         "agg_algorithm": config.get("agg_algorithm", "FedAvg"),
-        "pseudo_aggregation": {"enabled": False, "ema_alpha": 0.25},
-        "fedsam": {"enabled": False, "rho": 0.5},
-        "pcr": {"enabled": False, "mu": 0.01, "apply_mode": "pseudo_only"},
+        "pseudo_aggregation": config.get("pseudo_aggregation", {"enabled": False, "ema_alpha": 0.25}),
+        "fedsam": config.get("fedsam", {"enabled": False, "rho": 0.5}),
+        "pcr": config.get("pcr", {"enabled": False, "mu": 0.01, "apply_mode": "pseudo_only"}),
+        "prt": config.get("prt", {"enabled": False}),
+        "tau": config.get("tau", 10.0),
+        "rtc_b": config.get("rtc_b", 1),
         "mid_round_test": False,
-        
+
         # Attack
         "attack_params": config.get("attack_params", {"attacks": "No Attack"}),
-        
+
         # Defense
         "reputation": config.get("reputation", {"enabled": False}),
-        
+
         # Device
         "accelerator": config.get("accelerator", "gpu"),
         "gpu_id": config.get("gpu_id", [0]),
         "logginglevel": config.get("logginglevel", True),
         "report_status_data_queue": True,
-        
+
         # Network
         "network_simulation": config.get("network_simulation", False),
         "network_subnet": "",
         "network_gateway": "",
-        
+
         # Mobility
         "mobility": config.get("mobility", False),
         "random_geo": config.get("random_geo", False),
@@ -589,7 +592,7 @@ def build_scenario_from_config(config: dict) -> dict:
         "mobile_participants_percent": 0,
         "additional_participants": [],
         "schema_additional_participants": "random",
-        
+
         # Trustworthiness
         "with_trustworthiness": config.get("with_trustworthiness", False),
         "robustness_pillar": {},
@@ -616,7 +619,7 @@ def build_scenario_from_config(config: dict) -> dict:
         "energy_source": {},
         "hardware_efficiency": {},
         "federation_complexity": {},
-        
+
         # Situational Awareness
         "with_sa": config.get("with_sa", False),
         "strict_topology": True,
@@ -628,7 +631,7 @@ def build_scenario_from_config(config: dict) -> dict:
         "sar_training": False,
         "sar_training_policy": "idle",
     }
-    
+
     return scenario
 
 
@@ -639,16 +642,16 @@ def build_scenario_from_config(config: dict) -> dict:
 def main():
     """Main entry point."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Run DFL experiments via NEBULA UI")
     parser.add_argument("--username", default="admin", help="NEBULA username")
     parser.add_argument("--port", type=int, default=FRONTEND_PORT, help="Frontend port")
     parser.add_argument("--no-start", action="store_true", help="Don't start platform (assume already running)")
     parser.add_argument("--stop-after", action="store_true", help="Stop platform after experiment")
     parser.add_argument("--wait", action="store_true", help="Wait for experiment to complete")
-    
+
     args = parser.parse_args()
-    
+
     print("="*60)
     print("NEBULA DFL EXPERIMENT RUNNER (UI/API)")
     print("="*60)
@@ -656,10 +659,10 @@ def main():
     for key, value in EXPERIMENT_CONFIG.items():
         print(f"  {key}: {value}")
     print()
-    
+
     # Initialize platform
     platform = NebulaPlatform(username=args.username)
-    
+
     try:
         if not args.no_start:
             # Start the platform
@@ -672,25 +675,25 @@ def main():
             if not platform.client.wait_for_service(timeout=30):
                 logger.error("NEBULA platform not available. Start it first or remove --no-start")
                 sys.exit(1)
-        
+
         # Build scenario
         scenario = build_scenario_from_config(EXPERIMENT_CONFIG)
-        
+
         # Deploy experiment
         logger.info("Deploying experiment...")
         result = platform.deploy_experiment(scenario)
-        
+
         if "error" in result:
             logger.error(f"Failed to deploy experiment: {result['error']}")
             sys.exit(1)
-        
+
         logger.info("Experiment deployed successfully!")
         logger.info(f"UI available at: http://localhost:{FRONTEND_PORT}/platform/dashboard")
-        
+
         if args.wait:
             logger.info("Waiting for experiment to complete...")
             logger.info("Press Ctrl+C to stop waiting")
-            
+
             try:
                 while True:
                     running = platform.client.get_running_scenarios()
@@ -700,15 +703,15 @@ def main():
                     time.sleep(10)
             except KeyboardInterrupt:
                 logger.info("Stopped waiting")
-        
+
         if not args.stop_after and not args.wait:
             logger.info("Experiment is running. Press Ctrl+C to stop the platform")
             while True:
                 time.sleep(1)
-    
+
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
-    
+
     finally:
         if args.stop_after:
             platform.stop()
