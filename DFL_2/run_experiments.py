@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
 from typing import List, Dict, Any, Optional, Set
@@ -162,6 +163,7 @@ class NebulaClient:
         self.password = password
         self.session = requests.Session()
         self.logged_in = False
+        self._current_scenario_name = None
     
     def login(self) -> bool:
         """Login to NEBULA and establish session."""
@@ -281,31 +283,157 @@ class NebulaClient:
             logger.error(f"Error stopping scenario: {e}")
             return False
     
-    def wait_for_scenario_completion(self, poll_interval: int = 30, timeout: int = 3600) -> bool:
+    @staticmethod
+    def count_node_containers() -> int:
+        """
+        Count running node (participant) containers via the Docker CLI.
+
+        This is the robust completion signal: it is independent of whether every
+        node successfully POSTs /node/done to the frontend (a single missed
+        report makes the frontend's runningscenario status hang forever).
+        Returns -1 if docker is unavailable so callers can fall back to the API.
+        """
+        try:
+            out = subprocess.run(
+                ["docker", "ps", "--format", "{{.Names}}"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if out.returncode != 0:
+                return -1
+            return sum(1 for n in out.stdout.splitlines() if "participant" in n)
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return -1
+
+    def is_scenario_active(self) -> bool:
+        """
+        A scenario is active if the frontend reports it running OR its node
+        containers are still up. Combining both closes the race where the API
+        has not yet flipped to 'running' and the gap where nodes are up but the
+        API already reports 'not running'.
+        """
+        if self.get_running_scenarios():
+            return True
+        return self.count_node_containers() > 0
+
+    def get_running_scenario_name(self) -> Optional[str]:
+        """Return the name of the currently running scenario, or None."""
+        running = self.get_running_scenarios()
+        if running:
+            return running[0].get("name")
+        return None
+
+    def wait_for_scenario_start(self, startup_timeout: int = 600, poll: int = 5) -> bool:
+        """
+        Block until the scenario has actually started (node containers exist or
+        the API reports running). Without this, deployment is asynchronous and
+        an immediate completion check races the launch, so the runner declares
+        the scenario 'complete' in milliseconds and stampedes the queue.
+
+        Captures the running scenario name in self._current_scenario_name so it
+        can be finalized later even if the API stops reporting it.
+        """
+        logger.info("Waiting for scenario to start...")
+        start = time.time()
+        while time.time() - start < startup_timeout:
+            name = self.get_running_scenario_name()
+            if name:
+                self._current_scenario_name = name
+            if self.is_scenario_active():
+                logger.info(f"Scenario is running (startup took {int(time.time() - start)}s)")
+                return True
+            time.sleep(poll)
+        logger.warning(f"Scenario never started within {startup_timeout}s")
+        return False
+
+    def finalize_scenario(self, scenario_name: str = None, idle_timeout: int = 120, grace: int = 30) -> None:
+        """
+        Ensure the frontend queue advances after a scenario ends.
+
+        Preferred (clean) path: when every node reports /node/done, the frontend
+        both releases its queue AND marks the scenario 'completed' (green). We wait
+        briefly for that. Only if the frontend is still stuck on 'running' after the
+        grace period (a node crashed / never reported done, so the queue is wedged)
+        do we force-stop via the stop endpoint — which sets 'finished' (red), the
+        correct signal for a run that did not end cleanly.
+        """
+        scenario_name = scenario_name or self._current_scenario_name
+
+        # Give the natural completion path a chance to release the queue.
+        start = time.time()
+        while time.time() - start < grace:
+            if not self.get_running_scenarios():
+                logger.info("Scenario released the queue on its own (marked completed)")
+                self._current_scenario_name = None
+                return
+            time.sleep(3)
+
+        # Still 'running' -> wedged. Force-stop to unblock the queue.
+        if scenario_name:
+            logger.info(f"Scenario {scenario_name} still 'running' after end; force-stopping to release the queue")
+            self.stop_scenario(scenario_name, stop_all=False)
+        # Wait until the frontend is idle again before the next deploy.
+        start = time.time()
+        while time.time() - start < idle_timeout:
+            if not self.is_scenario_active():
+                break
+            time.sleep(3)
+        self._current_scenario_name = None
+
+    def wait_for_scenario_completion(
+        self,
+        poll_interval: int = 30,
+        timeout: int = 3600,
+        startup_timeout: int = 600,
+        scenario_name: str = None,
+    ) -> bool:
         """
         Wait for the current scenario to complete.
-        
-        Args:
-            poll_interval: Seconds between status checks
-            timeout: Maximum seconds to wait
-            
+
+        Phase 1: wait until it actually starts (fixes the deploy/poll race).
+        Phase 2: wait until neither the API nor any node containers report it
+                 active. On timeout, force-stop and clean up so one stuck run
+                 cannot block an unattended overnight queue.
+
         Returns:
-            True if scenario completed, False if timeout
+            True if the scenario completed on its own, False if it never started
+            or had to be force-stopped on timeout.
         """
+        # Phase 1 — must be running before we can meaningfully wait for the end.
+        if not self.wait_for_scenario_start(startup_timeout=startup_timeout):
+            return False
+
+        # Phase 2 — wait for genuine completion.
+        # Completion is judged primarily by the node-container lifecycle: once
+        # containers have appeared, the run is done when they have all exited.
+        # This is authoritative even if the frontend API is stuck reporting
+        # 'running' (which happens whenever a single node misses its /node/done
+        # report). The API is only a fallback when docker is unavailable or no
+        # container ever appears.
         logger.info("Waiting for scenario to complete...")
         start_time = time.time()
-        
+        containers_seen = False
         while time.time() - start_time < timeout:
-            running = self.get_running_scenarios()
-            if not running:
-                logger.info("Scenario completed")
-                return True
-            
+            n = self.count_node_containers()
+            if n > 0:
+                containers_seen = True
             elapsed = int(time.time() - start_time)
-            logger.info(f"Scenario still running... ({elapsed}s elapsed)")
+
+            if containers_seen and n == 0:
+                logger.info(f"Scenario completed (node containers exited after {elapsed}s)")
+                self.finalize_scenario(scenario_name)
+                return True
+            if n < 0 and not self.get_running_scenarios():
+                # docker unavailable -> fall back to API-only signal
+                logger.info("Scenario completed (API reports not running)")
+                self.finalize_scenario(scenario_name)
+                return True
+
+            logger.info(f"Scenario still running... ({elapsed}s elapsed, {max(n, 0)} node containers up)")
             time.sleep(poll_interval)
-        
-        logger.warning("Timeout waiting for scenario completion")
+
+        # Timed out — force-stop so the queue can proceed.
+        logger.warning(f"Timeout after {timeout}s; force-stopping scenario to unblock the queue")
+        self.finalize_scenario(scenario_name)
         return False
 
 

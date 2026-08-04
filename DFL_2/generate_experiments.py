@@ -305,6 +305,7 @@ def build_scenario(
     attack: str,
     defense: str,
     scenario_title: str = None,
+    seed: int = 42,
 ) -> dict:
     """
     Build a complete scenario configuration from parameters.
@@ -346,6 +347,7 @@ def build_scenario(
         "deployment": "docker",
         "federation": federation,
         "rounds": 100,
+        "seed": seed,
         "topology": topology_clean,
         "nodes": nodes,
         "nodes_graph": nodes_graph,

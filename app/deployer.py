@@ -690,6 +690,10 @@ class Deployer:
             "NEBULA_DEFAULT_PASSWORD": "admin",
             "NEBULA_CONTROLLER_PORT": self.controller_port,
             "NEBULA_CONTROLLER_HOST": self.controller_host,
+            # GPU sharing: how many scenarios may share one GPU (default 2, enabling
+            # parallel experiments on a single-GPU machine). Propagated from the host;
+            # set NEBULA_MAX_SCENARIOS_PER_GPU=1 for isolated one-scenario-per-GPU.
+            "NEBULA_MAX_SCENARIOS_PER_GPU": os.environ.get("NEBULA_MAX_SCENARIOS_PER_GPU", "2"),
         }
 
         volumes = ["/nebula", "/var/run/docker.sock", "/etc/nginx/sites-available/default"]
@@ -775,6 +779,12 @@ class Deployer:
             "NEBULA_CONTROLLER_PORT": self.controller_port,
             "NEBULA_CONTROLLER_HOST": self.controller_host,
             "NEBULA_FRONTEND_PORT": self.frontend_port,
+            # Propagate the host's GPU selection into the controller container.
+            # Without this the controller falls back to a hardcoded "0,1,2,3"
+            # (see controller.py get_available_gpus), which on a machine with
+            # fewer GPUs makes it assign node containers to non-existent devices
+            # and the NVIDIA prestart hook fails ("failed to create shim task").
+            "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES", "0"),
         }
 
         volumes = ["/nebula", "/var/run/docker.sock"]

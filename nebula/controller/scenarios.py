@@ -113,6 +113,7 @@ class Scenario:
         sar_training,
         sar_training_policy,
         physical_ips=None,
+        seed=42,
     ):
         """
         Initialize a Scenario instance.
@@ -243,6 +244,11 @@ class Scenario:
         self.sar_training = sar_training
         self.sar_training_policy = sar_training_policy
         self.physical_ips = physical_ips
+        # Master seed for reproducibility / seed-varying repeated runs. Controls
+        # both the Dirichlet data partition and per-node training determinism.
+        # Defaults to 42 so pre-existing scenario configs (which omit this key)
+        # keep their original single-seed behaviour.
+        self.seed = seed
 
     def attack_node_assign(
         self,
@@ -693,6 +699,10 @@ class ScenarioManagement:
             participant_config["device_args"]["proxy"] = node_config["proxy"]
             participant_config["device_args"]["malicious"] = node_config["malicious"]
             participant_config["scenario_args"]["rounds"] = int(self.scenario.rounds)
+            # Per-node training determinism seed (enable_deterministic). Tie it to
+            # the scenario master seed so repeated runs with different seeds vary
+            # both the data partition and the model init / training trajectory.
+            participant_config["scenario_args"]["random_seed"] = int(self.scenario.seed)
             participant_config["data_args"]["dataset"] = self.scenario.dataset
             participant_config["data_args"]["iid"] = self.scenario.iid
             participant_config["data_args"]["partition_selection"] = self.scenario.partition_selection
@@ -1011,7 +1021,7 @@ class ScenarioManagement:
                 iid=self.scenario.iid,
                 partition=self.scenario.partition_selection,
                 partition_parameter=self.scenario.partition_parameter,
-                seed=42,
+                seed=self.scenario.seed,
                 config_dir=self.config_dir,
             )
         elif dataset_name == "FashionMNIST":
@@ -1021,7 +1031,7 @@ class ScenarioManagement:
                 iid=self.scenario.iid,
                 partition=self.scenario.partition_selection,
                 partition_parameter=self.scenario.partition_parameter,
-                seed=42,
+                seed=self.scenario.seed,
                 config_dir=self.config_dir,
             )
         elif dataset_name == "EMNIST":
@@ -1031,7 +1041,7 @@ class ScenarioManagement:
                 iid=self.scenario.iid,
                 partition=self.scenario.partition_selection,
                 partition_parameter=self.scenario.partition_parameter,
-                seed=42,
+                seed=self.scenario.seed,
                 config_dir=self.config_dir,
             )
         elif dataset_name == "CIFAR10":
@@ -1041,7 +1051,7 @@ class ScenarioManagement:
                 iid=self.scenario.iid,
                 partition=self.scenario.partition_selection,
                 partition_parameter=self.scenario.partition_parameter,
-                seed=42,
+                seed=self.scenario.seed,
                 config_dir=self.config_dir,
             )
         elif dataset_name == "CIFAR100":
@@ -1051,7 +1061,7 @@ class ScenarioManagement:
                 iid=self.scenario.iid,
                 partition=self.scenario.partition_selection,
                 partition_parameter=self.scenario.partition_parameter,
-                seed=42,
+                seed=self.scenario.seed,
                 config_dir=self.config_dir,
             )
         else:

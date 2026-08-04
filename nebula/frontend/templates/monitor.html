@@ -49,6 +49,17 @@
                                 </span>
                                 {% endif %}
                             </div>
+                            <div class="mb-4">
+                                <h5 class="text-muted mb-2">
+                                    <i class="fa fa-clock-o me-2"></i>Duration
+                                </h5>
+                                <span id="scenario_elapsed"
+                                    class="badge bg-secondary-subtle text-secondary px-3 py-2 ms-3"
+                                    data-elapsed="{{ elapsed_seconds if elapsed_seconds is not none else '' }}"
+                                    data-running="{{ 'true' if scenario_running else 'false' }}">
+                                    —
+                                </span>
+                            </div>
                         </div>
 
                         <div class="scenario-actions">
@@ -300,6 +311,49 @@
     showAlert('info', 'Some functionalities are disabled in the demo version.');
 </script>
 {% endif %}
+
+<!-- Live run-duration timer -->
+<script>
+    (function () {
+        const el = document.getElementById('scenario_elapsed');
+        if (!el) return;
+        const base = parseFloat(el.getAttribute('data-elapsed'));
+        if (isNaN(base)) { el.textContent = 'N/A'; return; }
+        const startedRunning = el.getAttribute('data-running') === 'true';
+        const t0 = Date.now();
+        let frozen = null;
+
+        function fmt(totalSec) {
+            totalSec = Math.max(0, Math.floor(totalSec));
+            const d = Math.floor(totalSec / 86400);
+            const h = Math.floor((totalSec % 86400) / 3600);
+            const m = Math.floor((totalSec % 3600) / 60);
+            const s = totalSec % 60;
+            const p = n => String(n).padStart(2, '0');
+            return (d > 0 ? d + 'd ' : '') + p(h) + ':' + p(m) + ':' + p(s);
+        }
+
+        function render() {
+            if (frozen !== null) { el.textContent = fmt(frozen); return; }
+            // Keep ticking while the status badge still reports "running"
+            // (monitor.js flips it live when the scenario ends).
+            const statusEl = document.getElementById('scenario_status');
+            const isRunning = statusEl
+                ? statusEl.getAttribute('data-scenario-status') === 'running'
+                : startedRunning;
+            if (isRunning) {
+                el.textContent = fmt(base + (Date.now() - t0) / 1000);
+            } else {
+                // Freeze at the final duration when the run stops.
+                frozen = startedRunning ? base + (Date.now() - t0) / 1000 : base;
+                el.textContent = fmt(frozen);
+            }
+        }
+
+        render();
+        setInterval(render, 1000);
+    })();
+</script>
 
 <!-- Load monitor.js -->
 <script type="module" src="{{ url_for('static', path='js/monitor/monitor.js') }}"></script>

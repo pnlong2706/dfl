@@ -1,0 +1,2104 @@
+[
+  {
+    "scenario_title": "CIFAR10 Dir(0.3) Pseu-DFedAvg Fully s42",
+    "scenario_description": "empty",
+    "deployment": "docker",
+    "federation": "DFL",
+    "rounds": 100,
+    "seed": 42,
+    "topology": "Fully",
+    "nodes": {
+      "0": {
+        "id": "0",
+        "ip": "192.168.50.2",
+        "port": "45001",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": true,
+        "neighbors": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 0,
+            "target": 1
+          },
+          {
+            "source": 0,
+            "target": 2
+          },
+          {
+            "source": 0,
+            "target": 3
+          },
+          {
+            "source": 0,
+            "target": 4
+          },
+          {
+            "source": 0,
+            "target": 5
+          },
+          {
+            "source": 0,
+            "target": 6
+          },
+          {
+            "source": 0,
+            "target": 7
+          },
+          {
+            "source": 0,
+            "target": 8
+          },
+          {
+            "source": 0,
+            "target": 9
+          },
+          {
+            "source": 0,
+            "target": 10
+          },
+          {
+            "source": 0,
+            "target": 11
+          },
+          {
+            "source": 0,
+            "target": 12
+          },
+          {
+            "source": 0,
+            "target": 13
+          },
+          {
+            "source": 0,
+            "target": 14
+          },
+          {
+            "source": 0,
+            "target": 15
+          },
+          {
+            "source": 0,
+            "target": 16
+          },
+          {
+            "source": 0,
+            "target": 17
+          },
+          {
+            "source": 0,
+            "target": 18
+          },
+          {
+            "source": 0,
+            "target": 19
+          }
+        ]
+      },
+      "1": {
+        "id": "1",
+        "ip": "192.168.50.3",
+        "port": "45002",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 1,
+            "target": 2
+          },
+          {
+            "source": 1,
+            "target": 3
+          },
+          {
+            "source": 1,
+            "target": 4
+          },
+          {
+            "source": 1,
+            "target": 5
+          },
+          {
+            "source": 1,
+            "target": 6
+          },
+          {
+            "source": 1,
+            "target": 7
+          },
+          {
+            "source": 1,
+            "target": 8
+          },
+          {
+            "source": 1,
+            "target": 9
+          },
+          {
+            "source": 1,
+            "target": 10
+          },
+          {
+            "source": 1,
+            "target": 11
+          },
+          {
+            "source": 1,
+            "target": 12
+          },
+          {
+            "source": 1,
+            "target": 13
+          },
+          {
+            "source": 1,
+            "target": 14
+          },
+          {
+            "source": 1,
+            "target": 15
+          },
+          {
+            "source": 1,
+            "target": 16
+          },
+          {
+            "source": 1,
+            "target": 17
+          },
+          {
+            "source": 1,
+            "target": 18
+          },
+          {
+            "source": 1,
+            "target": 19
+          }
+        ]
+      },
+      "2": {
+        "id": "2",
+        "ip": "192.168.50.4",
+        "port": "45003",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 2,
+            "target": 3
+          },
+          {
+            "source": 2,
+            "target": 4
+          },
+          {
+            "source": 2,
+            "target": 5
+          },
+          {
+            "source": 2,
+            "target": 6
+          },
+          {
+            "source": 2,
+            "target": 7
+          },
+          {
+            "source": 2,
+            "target": 8
+          },
+          {
+            "source": 2,
+            "target": 9
+          },
+          {
+            "source": 2,
+            "target": 10
+          },
+          {
+            "source": 2,
+            "target": 11
+          },
+          {
+            "source": 2,
+            "target": 12
+          },
+          {
+            "source": 2,
+            "target": 13
+          },
+          {
+            "source": 2,
+            "target": 14
+          },
+          {
+            "source": 2,
+            "target": 15
+          },
+          {
+            "source": 2,
+            "target": 16
+          },
+          {
+            "source": 2,
+            "target": 17
+          },
+          {
+            "source": 2,
+            "target": 18
+          },
+          {
+            "source": 2,
+            "target": 19
+          }
+        ]
+      },
+      "3": {
+        "id": "3",
+        "ip": "192.168.50.5",
+        "port": "45004",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 3,
+            "target": 4
+          },
+          {
+            "source": 3,
+            "target": 5
+          },
+          {
+            "source": 3,
+            "target": 6
+          },
+          {
+            "source": 3,
+            "target": 7
+          },
+          {
+            "source": 3,
+            "target": 8
+          },
+          {
+            "source": 3,
+            "target": 9
+          },
+          {
+            "source": 3,
+            "target": 10
+          },
+          {
+            "source": 3,
+            "target": 11
+          },
+          {
+            "source": 3,
+            "target": 12
+          },
+          {
+            "source": 3,
+            "target": 13
+          },
+          {
+            "source": 3,
+            "target": 14
+          },
+          {
+            "source": 3,
+            "target": 15
+          },
+          {
+            "source": 3,
+            "target": 16
+          },
+          {
+            "source": 3,
+            "target": 17
+          },
+          {
+            "source": 3,
+            "target": 18
+          },
+          {
+            "source": 3,
+            "target": 19
+          }
+        ]
+      },
+      "4": {
+        "id": "4",
+        "ip": "192.168.50.6",
+        "port": "45005",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 4,
+            "target": 5
+          },
+          {
+            "source": 4,
+            "target": 6
+          },
+          {
+            "source": 4,
+            "target": 7
+          },
+          {
+            "source": 4,
+            "target": 8
+          },
+          {
+            "source": 4,
+            "target": 9
+          },
+          {
+            "source": 4,
+            "target": 10
+          },
+          {
+            "source": 4,
+            "target": 11
+          },
+          {
+            "source": 4,
+            "target": 12
+          },
+          {
+            "source": 4,
+            "target": 13
+          },
+          {
+            "source": 4,
+            "target": 14
+          },
+          {
+            "source": 4,
+            "target": 15
+          },
+          {
+            "source": 4,
+            "target": 16
+          },
+          {
+            "source": 4,
+            "target": 17
+          },
+          {
+            "source": 4,
+            "target": 18
+          },
+          {
+            "source": 4,
+            "target": 19
+          }
+        ]
+      },
+      "5": {
+        "id": "5",
+        "ip": "192.168.50.7",
+        "port": "45006",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 5,
+            "target": 6
+          },
+          {
+            "source": 5,
+            "target": 7
+          },
+          {
+            "source": 5,
+            "target": 8
+          },
+          {
+            "source": 5,
+            "target": 9
+          },
+          {
+            "source": 5,
+            "target": 10
+          },
+          {
+            "source": 5,
+            "target": 11
+          },
+          {
+            "source": 5,
+            "target": 12
+          },
+          {
+            "source": 5,
+            "target": 13
+          },
+          {
+            "source": 5,
+            "target": 14
+          },
+          {
+            "source": 5,
+            "target": 15
+          },
+          {
+            "source": 5,
+            "target": 16
+          },
+          {
+            "source": 5,
+            "target": 17
+          },
+          {
+            "source": 5,
+            "target": 18
+          },
+          {
+            "source": 5,
+            "target": 19
+          }
+        ]
+      },
+      "6": {
+        "id": "6",
+        "ip": "192.168.50.8",
+        "port": "45007",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 6,
+            "target": 7
+          },
+          {
+            "source": 6,
+            "target": 8
+          },
+          {
+            "source": 6,
+            "target": 9
+          },
+          {
+            "source": 6,
+            "target": 10
+          },
+          {
+            "source": 6,
+            "target": 11
+          },
+          {
+            "source": 6,
+            "target": 12
+          },
+          {
+            "source": 6,
+            "target": 13
+          },
+          {
+            "source": 6,
+            "target": 14
+          },
+          {
+            "source": 6,
+            "target": 15
+          },
+          {
+            "source": 6,
+            "target": 16
+          },
+          {
+            "source": 6,
+            "target": 17
+          },
+          {
+            "source": 6,
+            "target": 18
+          },
+          {
+            "source": 6,
+            "target": 19
+          }
+        ]
+      },
+      "7": {
+        "id": "7",
+        "ip": "192.168.50.9",
+        "port": "45008",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 7,
+            "target": 8
+          },
+          {
+            "source": 7,
+            "target": 9
+          },
+          {
+            "source": 7,
+            "target": 10
+          },
+          {
+            "source": 7,
+            "target": 11
+          },
+          {
+            "source": 7,
+            "target": 12
+          },
+          {
+            "source": 7,
+            "target": 13
+          },
+          {
+            "source": 7,
+            "target": 14
+          },
+          {
+            "source": 7,
+            "target": 15
+          },
+          {
+            "source": 7,
+            "target": 16
+          },
+          {
+            "source": 7,
+            "target": 17
+          },
+          {
+            "source": 7,
+            "target": 18
+          },
+          {
+            "source": 7,
+            "target": 19
+          }
+        ]
+      },
+      "8": {
+        "id": "8",
+        "ip": "192.168.50.10",
+        "port": "45009",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 8,
+            "target": 9
+          },
+          {
+            "source": 8,
+            "target": 10
+          },
+          {
+            "source": 8,
+            "target": 11
+          },
+          {
+            "source": 8,
+            "target": 12
+          },
+          {
+            "source": 8,
+            "target": 13
+          },
+          {
+            "source": 8,
+            "target": 14
+          },
+          {
+            "source": 8,
+            "target": 15
+          },
+          {
+            "source": 8,
+            "target": 16
+          },
+          {
+            "source": 8,
+            "target": 17
+          },
+          {
+            "source": 8,
+            "target": 18
+          },
+          {
+            "source": 8,
+            "target": 19
+          }
+        ]
+      },
+      "9": {
+        "id": "9",
+        "ip": "192.168.50.11",
+        "port": "45010",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 9,
+            "target": 10
+          },
+          {
+            "source": 9,
+            "target": 11
+          },
+          {
+            "source": 9,
+            "target": 12
+          },
+          {
+            "source": 9,
+            "target": 13
+          },
+          {
+            "source": 9,
+            "target": 14
+          },
+          {
+            "source": 9,
+            "target": 15
+          },
+          {
+            "source": 9,
+            "target": 16
+          },
+          {
+            "source": 9,
+            "target": 17
+          },
+          {
+            "source": 9,
+            "target": 18
+          },
+          {
+            "source": 9,
+            "target": 19
+          }
+        ]
+      },
+      "10": {
+        "id": "10",
+        "ip": "192.168.50.12",
+        "port": "45011",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 10,
+            "target": 11
+          },
+          {
+            "source": 10,
+            "target": 12
+          },
+          {
+            "source": 10,
+            "target": 13
+          },
+          {
+            "source": 10,
+            "target": 14
+          },
+          {
+            "source": 10,
+            "target": 15
+          },
+          {
+            "source": 10,
+            "target": 16
+          },
+          {
+            "source": 10,
+            "target": 17
+          },
+          {
+            "source": 10,
+            "target": 18
+          },
+          {
+            "source": 10,
+            "target": 19
+          }
+        ]
+      },
+      "11": {
+        "id": "11",
+        "ip": "192.168.50.13",
+        "port": "45012",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 11,
+            "target": 12
+          },
+          {
+            "source": 11,
+            "target": 13
+          },
+          {
+            "source": 11,
+            "target": 14
+          },
+          {
+            "source": 11,
+            "target": 15
+          },
+          {
+            "source": 11,
+            "target": 16
+          },
+          {
+            "source": 11,
+            "target": 17
+          },
+          {
+            "source": 11,
+            "target": 18
+          },
+          {
+            "source": 11,
+            "target": 19
+          }
+        ]
+      },
+      "12": {
+        "id": "12",
+        "ip": "192.168.50.14",
+        "port": "45013",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 12,
+            "target": 13
+          },
+          {
+            "source": 12,
+            "target": 14
+          },
+          {
+            "source": 12,
+            "target": 15
+          },
+          {
+            "source": 12,
+            "target": 16
+          },
+          {
+            "source": 12,
+            "target": 17
+          },
+          {
+            "source": 12,
+            "target": 18
+          },
+          {
+            "source": 12,
+            "target": 19
+          }
+        ]
+      },
+      "13": {
+        "id": "13",
+        "ip": "192.168.50.15",
+        "port": "45014",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 13,
+            "target": 14
+          },
+          {
+            "source": 13,
+            "target": 15
+          },
+          {
+            "source": 13,
+            "target": 16
+          },
+          {
+            "source": 13,
+            "target": 17
+          },
+          {
+            "source": 13,
+            "target": 18
+          },
+          {
+            "source": 13,
+            "target": 19
+          }
+        ]
+      },
+      "14": {
+        "id": "14",
+        "ip": "192.168.50.16",
+        "port": "45015",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 14,
+            "target": 15
+          },
+          {
+            "source": 14,
+            "target": 16
+          },
+          {
+            "source": 14,
+            "target": 17
+          },
+          {
+            "source": 14,
+            "target": 18
+          },
+          {
+            "source": 14,
+            "target": 19
+          }
+        ]
+      },
+      "15": {
+        "id": "15",
+        "ip": "192.168.50.17",
+        "port": "45016",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "16",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 15,
+            "target": 16
+          },
+          {
+            "source": 15,
+            "target": 17
+          },
+          {
+            "source": 15,
+            "target": 18
+          },
+          {
+            "source": 15,
+            "target": 19
+          }
+        ]
+      },
+      "16": {
+        "id": "16",
+        "ip": "192.168.50.18",
+        "port": "45017",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "17",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 16,
+            "target": 17
+          },
+          {
+            "source": 16,
+            "target": 18
+          },
+          {
+            "source": 16,
+            "target": 19
+          }
+        ]
+      },
+      "17": {
+        "id": "17",
+        "ip": "192.168.50.19",
+        "port": "45018",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "18",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 17,
+            "target": 18
+          },
+          {
+            "source": 17,
+            "target": 19
+          }
+        ]
+      },
+      "18": {
+        "id": "18",
+        "ip": "192.168.50.20",
+        "port": "45019",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "19"
+        ],
+        "links": [
+          {
+            "source": 18,
+            "target": 19
+          }
+        ]
+      },
+      "19": {
+        "id": "19",
+        "ip": "192.168.50.21",
+        "port": "45020",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false,
+        "neighbors": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18"
+        ],
+        "links": []
+      }
+    },
+    "nodes_graph": {
+      "0": {
+        "id": "0",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": true
+      },
+      "1": {
+        "id": "1",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "2": {
+        "id": "2",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "3": {
+        "id": "3",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "4": {
+        "id": "4",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "5": {
+        "id": "5",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "6": {
+        "id": "6",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "7": {
+        "id": "7",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "8": {
+        "id": "8",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "9": {
+        "id": "9",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "10": {
+        "id": "10",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "11": {
+        "id": "11",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "12": {
+        "id": "12",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "13": {
+        "id": "13",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "14": {
+        "id": "14",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "15": {
+        "id": "15",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "16": {
+        "id": "16",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "17": {
+        "id": "17",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "18": {
+        "id": "18",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      },
+      "19": {
+        "id": "19",
+        "role": "trainer_aggregator",
+        "malicious": false,
+        "proxy": false,
+        "start": false
+      }
+    },
+    "n_nodes": 20,
+    "matrix": [
+      [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ]
+    ],
+    "dataset": "CIFAR10",
+    "iid": false,
+    "partition_selection": "dirichlet",
+    "partition_parameter": 0.3,
+    "model": "SimpleNet",
+    "agg_algorithm": "FedAvg",
+    "pseudo_aggregation": {
+      "enabled": true,
+      "ema_alpha": 0.25,
+      "weight_drop_rate": 0.75,
+      "weight_schedule_step": 30,
+      "stop_pseudo_round": 60
+    },
+    "fedsam": {
+      "enabled": false,
+      "rho": 0.5
+    },
+    "pcr": {
+      "enabled": false,
+      "mu": 0.01,
+      "apply_mode": "all_round"
+    },
+    "mid_round_test": false,
+    "logginglevel": true,
+    "report_status_data_queue": true,
+    "epochs": 2,
+    "attack_params": {
+      "attacks": "No Attack",
+      "poisoned_node_percent": 0,
+      "round_start_attack": 1,
+      "round_stop_attack": 100,
+      "attack_interval": 1
+    },
+    "reputation": {
+      "enabled": false,
+      "metrics": {
+        "model_similarity": {
+          "enabled": false,
+          "weight": 0
+        },
+        "num_messages": {
+          "enabled": false,
+          "weight": 0
+        },
+        "model_arrival_latency": {
+          "enabled": false,
+          "weight": 0
+        },
+        "fraction_parameters_changed": {
+          "enabled": false,
+          "weight": 0
+        }
+      },
+      "initial_reputation": 0.2,
+      "weighting_factor": "dynamic"
+    },
+    "mobility": false,
+    "network_simulation": false,
+    "mobility_type": "both",
+    "radius_federation": 500,
+    "scheme_mobility": "random",
+    "round_frequency": 1,
+    "mobile_participants_percent": 100,
+    "random_geo": false,
+    "latitude": 38.023522,
+    "longitude": -1.174389,
+    "with_sa": false,
+    "strict_topology": false,
+    "sad_candidate_selector": "Distance",
+    "sad_model_handler": "std",
+    "sar_arbitration_policy": "sap",
+    "sar_neighbor_policy": "Distance",
+    "sar_training": false,
+    "sar_training_policy": "Broad-Propagation Strategy",
+    "random_topology_probability": "0.5",
+    "with_trustworthiness": false,
+    "robustness_pillar": "20",
+    "resilience_to_attacks": "40",
+    "algorithm_robustness": "40",
+    "client_reliability": "20",
+    "privacy_pillar": "15",
+    "technique": "20",
+    "uncertainty": "60",
+    "indistinguishability": "20",
+    "fairness_pillar": "15",
+    "selection_fairness": "30",
+    "performance_fairness": "35",
+    "class_distribution": "35",
+    "explainability_pillar": "15",
+    "interpretability": "40",
+    "post_hoc_methods": "60",
+    "accountability_pillar": "10",
+    "factsheet_completeness": "100",
+    "architectural_soundness_pillar": "10",
+    "client_management": "50",
+    "optimization": "50",
+    "sustainability_pillar": "15",
+    "energy_source": "50",
+    "hardware_efficiency": "25",
+    "federation_complexity": "25",
+    "network_subnet": "172.20.0.0/16",
+    "network_gateway": "172.20.0.1",
+    "additional_participants": [],
+    "schema_additional_participants": "random",
+    "accelerator": "cpu",
+    "gpu_id": [],
+    "physical_ips": []
+  }
+]

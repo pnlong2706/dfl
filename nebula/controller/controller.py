@@ -511,6 +511,28 @@ async def set_scenario_status_to_finished(
     return {"message": f"Scenario {scenario_name} status set to finished successfully"}
 
 
+@app.post("/scenarios/set_status_to_completed")
+async def set_scenario_status_to_completed(scenario_name: str = Body(..., embed=True)):
+    """
+    Sets the status of a scenario to 'completed' (successful natural end).
+
+    Args:
+        scenario_name (str): Name of the scenario to mark as completed.
+
+    Returns:
+        dict: A message confirming the operation.
+    """
+    from nebula.controller.database import scenario_set_status_to_completed
+
+    try:
+        scenario_set_status_to_completed(scenario_name)
+    except Exception as e:
+        logging.exception(f"Error setting scenario {scenario_name} to completed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+    return {"message": f"Scenario {scenario_name} status set to completed successfully"}
+
+
 @app.get("/scenarios/running")
 async def get_running_scenario(get_all: bool = False):
     """

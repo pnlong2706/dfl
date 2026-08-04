@@ -59,6 +59,14 @@ class Settings:
     config_frontend_dir: str = os.environ.get("NEBULA_CONFIG_FRONTEND_DIR", "config")
     env_file: str = os.environ.get("NEBULA_ENV_PATH", ".env")
     statistics_port: int = os.environ.get("NEBULA_STATISTICS_PORT", 8080)
+    # Maximum number of scenarios allowed to share a single GPU. Default 2 permits
+    # two scenarios to co-locate on one GPU — enabling parallel experiments on a
+    # single-GPU machine, since the DFL workload is latency-bound (GPU idle during
+    # aggregation barriers). Set NEBULA_MAX_SCENARIOS_PER_GPU=1 for the isolated
+    # one-scenario-per-GPU behaviour, or higher to oversubscribe further (watch
+    # VRAM: ~0.7 GB/node). The interference this introduces affects only wall-clock,
+    # not accuracy / communication-cost metrics.
+    max_scenarios_per_gpu: int = int(os.environ.get("NEBULA_MAX_SCENARIOS_PER_GPU", 2))
     PERMANENT_SESSION_LIFETIME: datetime.timedelta = datetime.timedelta(minutes=60)
     templates_dir: str = "templates"
     frontend_log: str = os.environ.get("NEBULA_FRONTEND_LOG", "/nebula/app/logs/frontend.log")
@@ -673,6 +681,21 @@ async def scenario_set_status_to_finished(scenario_name, all=False):
     """
     url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/set_status_to_finished"
     data = {"scenario_name": scenario_name, "all": all}
+    await controller_post(url, data)
+
+
+async def scenario_set_status_to_completed(scenario_name):
+    """
+    Mark a scenario as 'completed' (successful natural end) on the controller.
+
+    Unlike 'finished' (which the UI shows in red for stopped/failed runs), a run
+    that ends because every node finished its rounds should be 'completed' (green).
+
+    Parameters:
+        scenario_name (str): Name of the scenario to update.
+    """
+    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/set_status_to_completed"
+    data = {"scenario_name": scenario_name}
     await controller_post(url, data)
 
 
@@ -1592,6 +1615,35 @@ async def nebula_dashboard_monitor(scenario_name: str, request: Request, session
     """
     scenario = await get_scenario_by_name(scenario_name)
     if scenario:
+        # Compute elapsed run time server-side. start_time/end_time are written by
+        # the controller container's clock; computing the delta here (rather than
+        # in the browser) avoids any host/container timezone skew — the client only
+        # needs to keep ticking from this base while the scenario is running.
+        def _parse_ts(value):
+            # start_time is written as "%d/%m/%Y %H:%M:%S" while end_time is stored
+            # in ISO form ("%Y-%m-%d %H:%M:%S[.ffffff]") by scenario_set_status_to_finished.
+            if not value:
+                return None
+            for fmt in ("%d/%m/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    return datetime.datetime.strptime(value, fmt)
+                except (ValueError, TypeError):
+                    continue
+            return None
+
+        scenario_elapsed_seconds = None
+        scenario_running = scenario["status"] == "running"
+        start_dt = _parse_ts(scenario["start_time"])
+        end_str = scenario["end_time"] if "end_time" in scenario.keys() else None
+        end_dt = _parse_ts(end_str)
+        if start_dt is not None:
+            if scenario_running or end_dt is None:
+                scenario_elapsed_seconds = (datetime.datetime.now() - start_dt).total_seconds()
+            else:
+                scenario_elapsed_seconds = (end_dt - start_dt).total_seconds()
+            if scenario_elapsed_seconds < 0:
+                scenario_elapsed_seconds = 0
+
         nodes_list = await list_nodes_by_scenario_name(scenario_name)
         if nodes_list:
             formatted_nodes = []
@@ -1628,6 +1680,8 @@ async def nebula_dashboard_monitor(scenario_name: str, request: Request, session
                         "scenario": scenario,
                         "nodes": [list(node.values()) for node in formatted_nodes],
                         "user_logged_in": session.get("user"),
+                        "elapsed_seconds": scenario_elapsed_seconds,
+                        "scenario_running": scenario_running,
                     },
                 )
             # For API response, return the formatted node data
@@ -1638,6 +1692,7 @@ async def nebula_dashboard_monitor(scenario_name: str, request: Request, session
                     "scenario_name": scenario["name"],
                     "title": scenario["title"],
                     "description": scenario["description"],
+                    "elapsed_seconds": scenario_elapsed_seconds,
                 })
             else:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -1652,6 +1707,8 @@ async def nebula_dashboard_monitor(scenario_name: str, request: Request, session
                         "scenario": scenario,
                         "nodes": [],
                         "user_logged_in": session.get("user"),
+                        "elapsed_seconds": scenario_elapsed_seconds,
+                        "scenario_running": scenario_running,
                     },
                 )
             elif request.url.path == f"/platform/api/dashboard/{scenario_name}/monitor":
@@ -1661,6 +1718,7 @@ async def nebula_dashboard_monitor(scenario_name: str, request: Request, session
                     "scenario_name": scenario["name"],
                     "title": scenario["title"],
                     "description": scenario["description"],
+                    "elapsed_seconds": scenario_elapsed_seconds,
                 })
             else:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
@@ -1766,6 +1824,16 @@ async def node_stopped(scenario_name: str, request: Request):
         if all_nodes_finished:
             user_data.nodes_finished.clear()
             user_data.finish_scenario_event.set()
+            # Proactively mark the scenario COMPLETED as soon as every node reports
+            # done, instead of relying on the lazy transition in get_all_scenarios
+            # (which only fires when the dashboard LIST is viewed). Without this the
+            # scenario can appear stuck on "running" after a run has clearly ended.
+            # Use 'completed' (green), not 'finished' (red) — the run ended
+            # successfully because all nodes reached their final round.
+            try:
+                await scenario_set_status_to_completed(scenario_name)
+            except Exception as e:
+                logging.exception(f"Failed to mark scenario {scenario_name} completed: {e}")
             return JSONResponse(
                 status_code=200,
                 content={"message": "All nodes finished, scenario marked as completed."},
@@ -2168,18 +2236,20 @@ async def assign_available_gpu(scenario_data, role):
         running_scenarios = await get_running_scenarios(get_all=True)
         # Obtain currently used gpus
         if running_scenarios:
-            running_gpus = []
-            # Obtain associated gpus of the running scenarios
+            # Count how many running scenarios currently use each GPU. A GPU is
+            # only considered unavailable once it has reached max_scenarios_per_gpu
+            # tenants — so with the default of 1 this reproduces the original
+            # one-scenario-per-GPU behaviour, while a higher value permits
+            # deliberate GPU sharing for parallel experiments.
+            gpu_usage_count = {}
             for scenario in running_scenarios:
                 scenario_gpus = json.loads(scenario["gpu_id"])
-                # Obtain the list of gpus in use without duplicates
-                for gpu in scenario_gpus:
-                    if gpu not in running_gpus:
-                        running_gpus.append(gpu)
+                for gpu in set(scenario_gpus):
+                    gpu_usage_count[gpu] = gpu_usage_count.get(gpu, 0) + 1
 
-            # Add available system gpus if they are not in use
+            max_per_gpu = max(1, settings.max_scenarios_per_gpu)
             for gpu in available_system_gpus:
-                if gpu not in running_gpus:
+                if gpu_usage_count.get(gpu, 0) < max_per_gpu:
                     available_gpus.append(gpu)
         else:
             available_gpus = available_system_gpus

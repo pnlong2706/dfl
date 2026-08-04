@@ -1003,19 +1003,28 @@ def scenario_set_status_to_finished(scenario_name):
 
 def scenario_set_status_to_completed(scenario_name):
     """
-    Set the status of a specific scenario to "completed".
+    Set the status of a specific scenario to "completed" and record its end time.
 
     Parameters:
         scenario_name (str): The unique name identifier of the scenario to update.
 
     Behavior:
         - Updates the scenario's status to "completed".
+        - Sets end_time (only if not already set) so the run duration can be shown.
         - Commits the change to the database.
     """
     with sqlite3.connect(scenario_db_file_location) as conn:
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
-        c.execute("UPDATE scenarios SET status = 'completed' WHERE name = ?;", (scenario_name,))
+        current_time = str(datetime.datetime.now())
+        # Only stamp end_time if it is still empty, so re-runs of the lazy check
+        # don't keep moving the completion timestamp.
+        c.execute(
+            "UPDATE scenarios SET status = 'completed', "
+            "end_time = CASE WHEN end_time IS NULL OR end_time = '' THEN ? ELSE end_time END "
+            "WHERE name = ?;",
+            (current_time, scenario_name),
+        )
         conn.commit()
 
 

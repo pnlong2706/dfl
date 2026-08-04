@@ -166,3 +166,14 @@ json_outputs/
 # AI assistant documentation (local only)
 CLAUDE.md
 .claude/
+
+# Experiment runtime data (never commit; keep only package placeholders)
+app/logs/*
+app/databases/*
+app/certs/*
+!app/logs/__init__.py
+!app/databases/__init__.py
+!app/certs/__init__.py
+
+# Local experiment artifacts
+DFL_2/revision_experiments/completed.txt
